@@ -3,14 +3,14 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Smartly minify, compress and cache HTML, CSS & JavaScript files to boost website speed. 🚀
-Version: 1.2.2
+Version: 1.2.3
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 // Define plugin version for future releases
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.2.2' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.2.3' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -312,7 +312,7 @@ function aero_check_plugin_update() {
 	$saved_version = get_option('aero_plugin_version' );
 
 	if ( version_compare( $saved_version, AERO_PLUGIN_VERSION_NUM, '<' ) || $saved_version === FALSE ) {
-		if ( $saved_version && in_array( $saved_version, ['1.2.2'], true ) ) {
+		if ( $saved_version && in_array( $saved_version, ['1.2.2', '1.2.3'], true ) ) {
 			update_option( 'aero_review_notice', 'on' );
 		}
 		
@@ -361,6 +361,9 @@ function aero_minify_html( $buffer ) {
 		));
 	}
 
+	// NEW: Process all external CSS and JS files in the HTML output
+	$buffer = aero_process_html_assets( $buffer );
+
 	$final = strlen( $buffer );
 	if ($initial > 0) {
 		$savings = round((($initial - $final) / $initial * 100), 3);
@@ -377,6 +380,76 @@ function aero_minify_html( $buffer ) {
 	}
 
 	return $buffer;
+}
+
+// NEW: Process all CSS and JS assets found in HTML output
+function aero_process_html_assets( $html ) {
+	// Process CSS files
+	if ( get_option( 'aero_combine_css', 1 ) === 'on' ) {
+		$html = preg_replace_callback(
+			'/<link[^>]+rel=["\']stylesheet["\'][^>]+href=["\'](https?:\/\/[^"\']+\.css(?:\?[^"\']*)?)["\'][^>]*>/i',
+			function( $matches ) {
+				$original_tag = $matches[0];
+				$css_url = $matches[1];
+				
+				// Skip already minified files
+				if ( strpos( $css_url, '.min.css' ) !== false || strpos( $css_url, '/cache/aero/css/' ) !== false ) {
+					return $original_tag;
+				}
+				
+				$minified_url = aero_minify_file( $css_url, 'css' );
+				if ( $minified_url ) {
+					$new_tag = str_replace( $css_url, $minified_url, $original_tag );
+					
+					// Apply async CSS if enabled
+					if ( get_option( 'aero_async_css', 1 ) === 'on' ) {
+						// Extract media attribute
+						if ( preg_match( '/media=["\']([^"\']+)["\']/', $new_tag, $media_match ) ) {
+							$media = $media_match[1];
+						} else {
+							$media = 'all';
+						}
+						
+						// Convert to async loading
+						$new_tag = preg_replace( '/media=["\'][^"\']+["\']/', "media='print' onload=\"this.media='all'; this.onload=null;\"", $new_tag );
+						if ( !preg_match( '/media=["\']/', $new_tag ) ) {
+							$new_tag = str_replace( '<link', "<link media='print' onload=\"this.media='all'; this.onload=null;\"", $new_tag );
+						}
+						$new_tag .= '<noscript><link rel="stylesheet" href="' . esc_url( $minified_url ) . '" media="' . esc_attr( $media ) . '"></noscript>';
+					}
+					
+					return $new_tag;
+				}
+				return $original_tag;
+			},
+			$html
+		);
+	}
+	
+	// Process JS files
+	if ( get_option( 'aero_combine_js', 1 ) === 'on' ) {
+		$html = preg_replace_callback(
+			'/<script[^>]+src=["\'](https?:\/\/[^"\']+\.js(?:\?[^"\']*)?)["\'][^>]*><\/script>/i',
+			function( $matches ) {
+				$original_tag = $matches[0];
+				$js_url = $matches[1];
+				
+				// Skip already minified files
+				if ( strpos( $js_url, '.min.js' ) !== false || strpos( $js_url, '/cache/aero/js/' ) !== false ) {
+					return $original_tag;
+				}
+				
+				$minified_url = aero_minify_file( $js_url, 'js' );
+				if ( $minified_url ) {
+					return str_replace( $js_url, $minified_url, $original_tag );
+				}
+				return $original_tag;
+			},
+			$html
+		);
+	}
+	
+	return $html;
 }
 
 function aero_html_minify_start() {
@@ -400,48 +473,6 @@ function aero_print_minify_comment() {
 	}
 }
 add_action( 'shutdown', 'aero_print_minify_comment', 10000 );
-
-add_action( 'wp_enqueue_scripts', 'aero_minify_enqueue_scripts', 999 );
-function aero_minify_enqueue_scripts() {
-	global $wp_styles, $wp_scripts;
-
-	if ( !empty( $wp_styles->queue ) && get_option( 'aero_combine_css', 1 ) === 'on' ) {
-		foreach ($wp_styles->queue as $handle) {
-			$src = $wp_styles->registered[$handle]->src;
-			if ($src) {
-				$minified_src = aero_minify_file($src, 'css');
-				if ($minified_src) {
-					$wp_styles->registered[$handle]->src = $minified_src;
-				}
-			}
-		}
-	}
-
-	if ( !empty( $wp_scripts->queue ) && get_option( 'aero_combine_js', 1 ) === 'on' ) {
-		foreach ($wp_scripts->queue as $handle) {
-			$src = $wp_scripts->registered[$handle]->src;
-			if ($src) {
-				$minified_src = aero_minify_file($src, 'js');
-				if ($minified_src) {
-					$wp_scripts->registered[$handle]->src = $minified_src;
-				}
-			}
-		}
-	}
-}
-
-add_filter( 'style_loader_tag', 'aero_async_css', 10, 4 );
-function aero_async_css( $html, $handle, $href, $media ) {
-	if ( get_option( 'aero_async_css', 1 ) !== 'on' ) {
-		return $html;
-	}
-	
-	if ( strpos( $href, '/cache/aero/css/' ) !== false ) {
-		$html = str_replace( "media='$media'", "media='print' onload=\"this.media='all'; this.onload=null;\"", $html );
-		$html .= '<noscript><link rel="stylesheet" href="' . esc_url( $href ) . '" media="' . esc_attr( $media ) . '"></noscript>';
-	}
-	return $html;
-}
 
 add_action( 'admin_bar_menu', 'aero_admin_bar_menu', 100 );
 function aero_admin_bar_menu( $wp_admin_bar ) {
@@ -480,26 +511,43 @@ function aero_cache_cleared_notice() {
 }
 
 function aero_minify_file( $file_url, $type ) {
-	
+	// Skip already minified files
 	if ( strpos($file_url, '.min.') !== false ) {
-		return $file_url;
+		return false;
+	}
+
+	// Skip external URLs (only process same-domain files)
+	$site_url = site_url();
+	$home_url = home_url();
+	
+	// Allow both site_url and home_url, and handle protocol-relative URLs
+	$file_url_normalized = str_replace( array( 'http://', 'https://' ), '//', $file_url );
+	$site_url_normalized = str_replace( array( 'http://', 'https://' ), '//', $site_url );
+	$home_url_normalized = str_replace( array( 'http://', 'https://' ), '//', $home_url );
+	
+	if ( strpos( $file_url_normalized, $site_url_normalized ) !== 0 && 
+	     strpos( $file_url_normalized, $home_url_normalized ) !== 0 ) {
+		return false;
 	}
 
 	$cache_filetype_dir = ( $type === 'js' ? 'js/' : 'css/' );
 	$cache_url = content_url() . '/cache/aero/';
 
-	$file_path = str_replace(home_url(), ABSPATH, $file_url);
+	// Convert URL to file path more reliably
+	$file_path = aero_url_to_path( $file_url );
+	
+	if ( !$file_path || !file_exists( $file_path ) ) {
+		return false;
+	}
+	
 	$minified_file_name = md5($file_url) . '.' . $type;
 	$minified_file_path = AERO_CACHE_DIR . $cache_filetype_dir . $minified_file_name;
 	$minified_file_url = $cache_url . $cache_filetype_dir . $minified_file_name;
 	$hash_file_path = $minified_file_path . '.hash';
 
-	if ( !file_exists( $file_path ) ) {
-		return false;
-	}
-	
 	$current_hash = md5_file($file_path);
 	
+	// Check if cached version exists and is up to date
 	if ( file_exists($minified_file_path) && file_exists($hash_file_path) ) {
 		$saved_hash = file_get_contents( $hash_file_path );
 		if ( $saved_hash === $current_hash ) {
@@ -528,6 +576,29 @@ function aero_minify_file( $file_url, $type ) {
 	} catch ( Exception $e ) {
 		return false;
 	}
+}
+
+// Helper function to convert URL to file path
+function aero_url_to_path( $url ) {
+	// Remove query string
+	$url = strtok( $url, '?' );
+	
+	// Try multiple conversion methods
+	$conversions = array(
+		str_replace( home_url(), ABSPATH, $url ),
+		str_replace( site_url(), ABSPATH, $url ),
+		str_replace( content_url(), WP_CONTENT_DIR, $url ),
+		str_replace( includes_url(), ABSPATH . WPINC, $url ),
+		str_replace( plugins_url(), WP_PLUGIN_DIR, $url ),
+	);
+	
+	foreach ( $conversions as $path ) {
+		if ( file_exists( $path ) ) {
+			return $path;
+		}
+	}
+	
+	return false;
 }
 
 ?>
