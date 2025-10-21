@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.4
+Version: 1.5.5
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.4' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.5' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -48,6 +48,19 @@ function aero_add_stylesheet() {
 	do_action( 'aero_rating_system_action' );
 }
 
+// Hide other plugin notices on Aero settings page
+add_action( 'admin_notices', 'aero_hide_other_notices', 1 );
+function aero_hide_other_notices() {
+	$screen = get_current_screen();
+	if ( $screen && $screen->id === 'settings_page_aero' ) {
+		remove_all_actions( 'admin_notices' );
+		remove_all_actions( 'all_admin_notices' );
+		// Re-add only Aero notices
+		add_action( 'admin_notices', 'aero_cache_cleared_notice' );
+		add_action( 'admin_notices', 'aero_submit_review_notice' );
+	}
+}
+
 // Register AJAX handlers for diagnostics
 add_action( 'wp_ajax_aero_get_diagnostics', 'aero_ajax_get_diagnostics' );
 function aero_ajax_get_diagnostics() {
@@ -59,7 +72,6 @@ function aero_ajax_get_diagnostics() {
 	
 	$hosting_info = aero_check_hosting_environment();
 	$dropins = aero_check_dropins();
-	$page_builder = aero_detect_page_builder();
 	
 	// Get cache statistics
 	$css_cache_size = aero_get_directory_size(AERO_CSS_CACHE_DIR);
@@ -72,12 +84,38 @@ function aero_ajax_get_diagnostics() {
 	wp_send_json_success( array(
 		'hosting' => $hosting_info,
 		'dropins' => $dropins,
-		'page_builder' => $page_builder,
 		'cache_stats' => array(
 			'css_files' => $css_file_count,
 			'js_files' => $js_file_count,
 			'total_size' => aero_format_bytes($total_cache_size)
 		)
+	) );
+}
+
+// Register AJAX handler for refreshing debug info
+add_action( 'wp_ajax_aero_refresh_debug', 'aero_ajax_refresh_debug' );
+function aero_ajax_refresh_debug() {
+	check_ajax_referer( 'aero_refresh_debug_nonce', 'nonce' );
+	
+	if ( !current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+	}
+	
+	// Check rate limit (30 minutes)
+	$last_refresh = get_transient( 'aero_debug_last_refresh' );
+	if ( $last_refresh !== false ) {
+		$time_remaining = 30 * 60 - (time() - $last_refresh);
+		wp_send_json_error( array( 
+			'message' => 'Please wait before refreshing again',
+			'time_remaining' => ceil($time_remaining / 60)
+		) );
+	}
+	
+	// Set rate limit
+	set_transient( 'aero_debug_last_refresh', time(), 30 * 60 );
+	
+	wp_send_json_success( array(
+		'debug_info' => aero_generate_debug_info()
 	) );
 }
 
@@ -211,10 +249,6 @@ function aero_admin_options() {
 				<div class="aero-diagnostic-spinner"></div>
 				<div class="aero-diagnostic-label">Checking Page Cache...</div>
 			</div>
-			<div class="aero-diagnostic-item aero-diagnostic-loading">
-				<div class="aero-diagnostic-spinner"></div>
-				<div class="aero-diagnostic-label">Detecting Page Builder...</div>
-			</div>
 		</div>
 		
 		<div id="aero-upgrade-notice" style="display:none;">
@@ -267,7 +301,6 @@ function aero_admin_options() {
 		function aeroUpdateDiagnostics(data) {
 			var hosting = data.hosting;
 			var dropins = data.dropins;
-			var pageBuilder = data.page_builder;
 			
 			var checks = [
 				{
@@ -284,12 +317,6 @@ function aero_admin_options() {
 					label: 'Page Cache (advanced-cache.php)',
 					status: dropins.advanced_cache,
 					type: 'important'
-				},
-				{
-					label: 'Page Builder Detected',
-					status: pageBuilder ? true : false,
-					type: 'info',
-					extra: pageBuilder ? pageBuilder : 'None'
 				}
 			];
 			
@@ -307,11 +334,7 @@ function aero_admin_options() {
 				
 				html += '<div class="aero-diagnostic-item ' + statusClass + ' ' + typeClass + '">';
 				html += '<div class="aero-diagnostic-icon">' + icon + '</div>';
-				html += '<div class="aero-diagnostic-label">' + check.label;
-				if (check.extra) {
-					html += '<span class="aero-diagnostic-extra">' + check.extra + '</span>';
-				}
-				html += '</div></div>';
+				html += '<div class="aero-diagnostic-label">' + check.label + '</div></div>';
 			});
 			
 			$('#aero-diagnostics-list').html(html);
@@ -403,7 +426,10 @@ function aero_admin_options() {
 					<div class="aero-debug-box" style="margin-top: 15px;">
 						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
 							<strong style="color: #e5e5e5;">Debug Information</strong>
-							<button type="button" onclick="aeroCopyDebug()" class="button button-small" style="background: #2e5aac; color: #fff; border: none; padding: 5px 12px; cursor: pointer;">Copy to Clipboard</button>
+							<div>
+								<button type="button" onclick="aeroRefreshDebug()" id="aero-refresh-debug-btn" class="button-small" style="background: none !important; color: #2e5aac !important;">Refresh Information</button>
+								<button type="button" onclick="aeroCopyDebug()" class="button-small" style="background: #2e5aac; color: #fff; border: none; padding: 5px 12px; cursor: pointer;">Copy to Clipboard</button>
+							</div>
 						</div>
 						<textarea id="aero-debug-info" readonly style="width: 100%; height: 300px; background: #0a0a0a; color: #0f0; border: 1px solid #313131; padding: 10px; font-family: monospace; font-size: 12px; line-height: 1.5;"><?php echo esc_textarea( aero_generate_debug_info() ); ?></textarea>
 					</div>
@@ -503,6 +529,43 @@ function aero_admin_options() {
 			btn.style.background = '#2e5aac';
 		}, 2000);
 	}
+	
+	function aeroRefreshDebug() {
+		var btn = document.getElementById('aero-refresh-debug-btn');
+		var originalText = btn.textContent;
+		btn.disabled = true;
+		btn.textContent = 'Refreshing...';
+		
+		jQuery.ajax({
+			url: ajaxurl,
+			type: 'POST',
+			data: {
+				action: 'aero_refresh_debug',
+				nonce: '<?php echo wp_create_nonce('aero_refresh_debug_nonce'); ?>'
+			},
+			success: function(response) {
+				if (response.success) {
+					document.getElementById('aero-debug-info').value = response.data.debug_info;
+					btn.textContent = '✓ Refreshed!';
+					btn.style.color = '#059669 !important';
+					setTimeout(function() {
+						btn.textContent = originalText;
+						btn.style.color = '#2e5aac !important';
+						btn.disabled = false;
+					}, 2000);
+				} else {
+					alert('Please wait ' + response.data.time_remaining + ' minutes before refreshing again.');
+					btn.textContent = originalText;
+					btn.disabled = false;
+				}
+			},
+			error: function() {
+				alert('Failed to refresh debug information. Please try again.');
+				btn.textContent = originalText;
+				btn.disabled = false;
+			}
+		});
+	}
 	</script>
 	</div>
 	<?php
@@ -546,10 +609,12 @@ function aero_generate_debug_info() {
 	$debug_info .= "advanced-cache.php: " . ($dropins['advanced_cache'] ? 'Present' : 'Not Found') . "\n";
 	$debug_info .= "object-cache.php: " . ($dropins['object_cache'] ? 'Present' : 'Not Found') . "\n\n";
 	
-	// Page Builder
+	// Page Builder & Editor
 	$page_builder = aero_detect_page_builder();
-	$debug_info .= "--- PAGE BUILDER ---\n";
-	$debug_info .= "Active Page Builder: " . ($page_builder ? $page_builder : 'None Detected') . "\n\n";
+	$using_gutenberg = aero_is_using_gutenberg();
+	$debug_info .= "--- PAGE BUILDER & EDITOR ---\n";
+	$debug_info .= "Active Page Builder: " . ($page_builder ? $page_builder : 'None Detected') . "\n";
+	$debug_info .= "Using Gutenberg: " . ($using_gutenberg ? 'Yes' : 'No') . "\n\n";
 	
 	// Server Info
 	$debug_info .= "--- SERVER ENVIRONMENT ---\n";
@@ -607,6 +672,28 @@ function aero_generate_debug_info() {
 	$debug_info .= "=== END DEBUG INFO ===\n";
 	
 	return $debug_info;
+}
+
+/**
+ * Check if site is using Gutenberg block editor
+ */
+function aero_is_using_gutenberg() {
+	// Check if Gutenberg plugin is active
+	if ( is_plugin_active( 'gutenberg/gutenberg.php' ) ) {
+		return true;
+	}
+	
+	// Check if using WordPress 5.0+ (has Gutenberg by default)
+	global $wp_version;
+	if ( version_compare( $wp_version, '5.0', '>=' ) ) {
+		// Check if Classic Editor plugin is active (disables Gutenberg)
+		if ( is_plugin_active( 'classic-editor/classic-editor.php' ) ) {
+			return false;
+		}
+		return true;
+	}
+	
+	return false;
 }
 
 /**

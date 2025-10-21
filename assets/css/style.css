@@ -12,8 +12,8 @@ body.settings_page_aero #wpbody-content {
 body.settings_page_aero .aero-wrap {
 	background: #000 !important;
 	color: #e5e5e5 !important;
-	margin-left: -20px;
-	margin-right: -20px;
+	margin-left: 0;
+	margin-right: 0;
 	padding: 20px;
 	min-height: 100vh;
 }
