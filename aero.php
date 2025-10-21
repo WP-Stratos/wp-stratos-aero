@@ -3,14 +3,14 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Smartly minify, compress and cache HTML, CSS & JavaScript files to boost website speed. 🚀
-Version: 1.2.3
+Version: 1.2.4
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 // Define plugin version for future releases
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.2.3' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.2.4' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -42,7 +42,6 @@ if ( !file_exists( AERO_JS_CACHE_DIR ) ) mkdir( AERO_JS_CACHE_DIR, 0755, true );
 // Register with hook 'wp_enqueue_scripts', which can be used for front end CSS and JavaScript
 add_action( 'admin_init', 'aero_add_stylesheet' );
 function aero_add_stylesheet() {
-	// Add version based on file modification time for cache busting
 	$css_file = plugin_dir_path( __FILE__ ) . 'assets/css/style.min.css';
 	$version = file_exists( $css_file ) ? filemtime( $css_file ) : AERO_PLUGIN_VERSION_NUM;
 	
@@ -55,7 +54,6 @@ function aero_add_stylesheet() {
 // Add inline critical CSS for immediate styling
 add_action( 'admin_head', 'aero_add_critical_css' );
 function aero_add_critical_css() {
-	// Only on Aero settings page
 	$screen = get_current_screen();
 	if ( $screen && $screen->id === 'settings_page_aero' ) {
 		?>
@@ -108,11 +106,13 @@ function aero_admin_options() {
     $combine_js = 'aero_combine_js';
     $combine_css = 'aero_combine_css';
 	$async_css = 'aero_async_css';
+	$defer_js = 'aero_defer_js';
 
     // Read in existing option value from database
     $combine_js_val = get_option($combine_js);
     $combine_css_val = get_option($combine_css);
 	$async_css_val = get_option($async_css);
+	$defer_js_val = get_option($defer_js);
 
 	// See if the user has posted us some information
 	if( isset( $_POST[$hidden_field_name] ) && $_POST[$hidden_field_name] == 'Y' ) {
@@ -125,10 +125,12 @@ function aero_admin_options() {
 				$combine_js_val = ( isset( $_POST[$combine_js] ) ? sanitize_text_field( $_POST[$combine_js] ) : "" );
 				$combine_css_val = ( isset( $_POST[$combine_css] ) ? sanitize_text_field( $_POST[$combine_css] ) : "" );
 				$async_css_val = ( isset( $_POST[$async_css] ) ? sanitize_text_field( $_POST[$async_css] ) : "" );
+				$defer_js_val = ( isset( $_POST[$defer_js] ) ? sanitize_text_field( $_POST[$defer_js] ) : "" );
 	
 				update_option( $combine_js, $combine_js_val );
 				update_option( $combine_css, $combine_css_val );
 				update_option( $async_css, $async_css_val );
+				update_option( $defer_js, $defer_js_val );
 	
 				echo '<div class="updated aero-notice"><p><strong>Settings Saved.</strong></p></div>';
 			}
@@ -172,8 +174,18 @@ function aero_admin_options() {
 						<?php _e('Enable Non-Render-Blocking CSS'); ?>
 					</label>
 					<div class="aero-setting-description">
-						Load minified CSS files asynchronously to eliminate render-blocking warnings in Google PageSpeed Insights. 
-						This improves your LCP (Largest Contentful Paint) score. Disable if you experience compatibility issues.
+						Eliminates render-blocking CSS warnings in Google PageSpeed Insights by loading ALL stylesheets asynchronously 
+						(including Elementor, theme files, and external fonts). Dramatically improves LCP scores.
+					</div>
+				</div>
+				<div class="aero-setting-group">
+					<label>
+						<input type="checkbox" name="<?php echo $defer_js; ?>" id="<?php echo $defer_js; ?>" <?php checked( $defer_js_val == 'on',true); ?> />
+						<?php _e('Defer JavaScript Loading'); ?>
+					</label>
+					<div class="aero-setting-description">
+						Defers all non-critical JavaScript to eliminate render-blocking JS warnings. Scripts execute after page content loads.
+						Excludes jQuery for compatibility.
 					</div>
 				</div>
 			</div>
@@ -312,7 +324,7 @@ function aero_check_plugin_update() {
 	$saved_version = get_option('aero_plugin_version' );
 
 	if ( version_compare( $saved_version, AERO_PLUGIN_VERSION_NUM, '<' ) || $saved_version === FALSE ) {
-		if ( $saved_version && in_array( $saved_version, ['1.2.2', '1.2.3'], true ) ) {
+		if ( $saved_version && in_array( $saved_version, ['1.2.2', '1.2.3', '1.2.4'], true ) ) {
 			update_option( 'aero_review_notice', 'on' );
 		}
 		
@@ -326,6 +338,7 @@ function aero_activate_plugin() {
     update_option( 'aero_combine_js', 'on' );
     update_option( 'aero_combine_css', 'on' );
 	update_option( 'aero_async_css', 'on' );
+	update_option( 'aero_defer_js', 'on' );
 	
 	if ( FALSE === get_option( 'aero_review_notice' ) ) {
 		add_option( 'aero_review_notice', 'on' );
@@ -338,6 +351,15 @@ function aero_deactivate_plugin() {
 	delete_option( 'aero_plugin_version' );
 }
 register_deactivation_hook( __FILE__, 'aero_deactivate_plugin' );
+
+// Add preconnect for Google Fonts in head
+add_action( 'wp_head', 'aero_add_resource_hints', 1 );
+function aero_add_resource_hints() {
+	if ( get_option( 'aero_async_css', 1 ) === 'on' ) {
+		echo '<link rel="preconnect" href="https://fonts.googleapis.com">' . "\n";
+		echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' . "\n";
+	}
+}
 
 function aero_minify_html( $buffer ) {
 	$aero_plugin_version = get_option( 'aero_plugin_version' );
@@ -361,7 +383,7 @@ function aero_minify_html( $buffer ) {
 		));
 	}
 
-	// NEW: Process all external CSS and JS files in the HTML output
+	// Process all external CSS and JS files in the HTML output
 	$buffer = aero_process_html_assets( $buffer );
 
 	$final = strlen( $buffer );
@@ -382,74 +404,161 @@ function aero_minify_html( $buffer ) {
 	return $buffer;
 }
 
-// NEW: Process all CSS and JS assets found in HTML output
+// Process ALL CSS and JS assets found in HTML output
 function aero_process_html_assets( $html ) {
-	// Process CSS files
-	if ( get_option( 'aero_combine_css', 1 ) === 'on' ) {
+	$async_css_enabled = ( get_option( 'aero_async_css', 1 ) === 'on' );
+	$defer_js_enabled = ( get_option( 'aero_defer_js', 1 ) === 'on' );
+	$css_optimize_enabled = ( get_option( 'aero_combine_css', 1 ) === 'on' );
+	$js_optimize_enabled = ( get_option( 'aero_combine_js', 1 ) === 'on' );
+	
+	// Process ALL CSS files - both local and external (like Google Fonts)
+	if ( $async_css_enabled ) {
 		$html = preg_replace_callback(
-			'/<link[^>]+rel=["\']stylesheet["\'][^>]+href=["\'](https?:\/\/[^"\']+\.css(?:\?[^"\']*)?)["\'][^>]*>/i',
-			function( $matches ) {
-				$original_tag = $matches[0];
-				$css_url = $matches[1];
+			'/<link([^>]*?)rel=["\']stylesheet["\']([^>]*?)>/i',
+			function( $matches ) use ( $css_optimize_enabled ) {
+				$full_match = $matches[0];
+				$before = $matches[1];
+				$after = $matches[2];
 				
-				// Skip already minified files
-				if ( strpos( $css_url, '.min.css' ) !== false || strpos( $css_url, '/cache/aero/css/' ) !== false ) {
-					return $original_tag;
+				// Extract href
+				if ( !preg_match( '/href=["\']([^"\']+)["\']/', $full_match, $href_match ) ) {
+					return $full_match;
 				}
+				$css_url = $href_match[1];
 				
-				$minified_url = aero_minify_file( $css_url, 'css' );
-				if ( $minified_url ) {
-					$new_tag = str_replace( $css_url, $minified_url, $original_tag );
-					
-					// Apply async CSS if enabled
-					if ( get_option( 'aero_async_css', 1 ) === 'on' ) {
-						// Extract media attribute
-						if ( preg_match( '/media=["\']([^"\']+)["\']/', $new_tag, $media_match ) ) {
-							$media = $media_match[1];
-						} else {
-							$media = 'all';
-						}
-						
-						// Convert to async loading
-						$new_tag = preg_replace( '/media=["\'][^"\']+["\']/', "media='print' onload=\"this.media='all'; this.onload=null;\"", $new_tag );
-						if ( !preg_match( '/media=["\']/', $new_tag ) ) {
-							$new_tag = str_replace( '<link', "<link media='print' onload=\"this.media='all'; this.onload=null;\"", $new_tag );
-						}
-						$new_tag .= '<noscript><link rel="stylesheet" href="' . esc_url( $minified_url ) . '" media="' . esc_attr( $media ) . '"></noscript>';
+				// Check if this is a local file that needs minification
+				$is_local = aero_is_local_url( $css_url );
+				$needs_minification = $is_local && 
+									  $css_optimize_enabled && 
+									  strpos( $css_url, '.min.css' ) === false && 
+									  strpos( $css_url, '/cache/aero/css/' ) === false;
+				
+				// Minify local non-minified files
+				if ( $needs_minification ) {
+					$minified_url = aero_minify_file( $css_url, 'css' );
+					if ( $minified_url ) {
+						$css_url = $minified_url;
+						$full_match = str_replace( $href_match[1], $minified_url, $full_match );
 					}
-					
-					return $new_tag;
 				}
-				return $original_tag;
+				
+				// Extract media attribute
+				if ( preg_match( '/media=["\']([^"\']+)["\']/', $full_match, $media_match ) ) {
+					$media = $media_match[1];
+				} else {
+					$media = 'all';
+				}
+				
+				// Skip if already async
+				if ( strpos( $full_match, 'onload=' ) !== false ) {
+					return $full_match;
+				}
+				
+				// Apply async loading technique
+				$new_tag = preg_replace( '/media=["\'][^"\']*["\']/', "media='print' onload=\"this.media='$media'\"", $full_match );
+				if ( strpos( $new_tag, "media='print'" ) === false ) {
+					// Media attribute not found, add it
+					$new_tag = str_replace( '<link', "<link media='print' onload=\"this.media='$media'\"", $full_match );
+				}
+				
+				// Add noscript fallback
+				$new_tag .= "\n<noscript><link rel=\"stylesheet\" href=\"" . esc_url( $css_url ) . "\" media=\"" . esc_attr( $media ) . "\"></noscript>";
+				
+				return $new_tag;
 			},
 			$html
 		);
+	} else {
+		// Even if async is disabled, still minify local CSS files
+		if ( $css_optimize_enabled ) {
+			$html = preg_replace_callback(
+				'/<link([^>]*?)href=["\']([^"\']+\.css(?:\?[^"\']*)?)["\']([^>]*?)>/i',
+				function( $matches ) {
+					$full_match = $matches[0];
+					$css_url = $matches[2];
+					
+					// Skip already minified or cached files
+					if ( strpos( $css_url, '.min.css' ) !== false || 
+					     strpos( $css_url, '/cache/aero/css/' ) !== false ||
+					     !aero_is_local_url( $css_url ) ) {
+						return $full_match;
+					}
+					
+					$minified_url = aero_minify_file( $css_url, 'css' );
+					if ( $minified_url ) {
+						return str_replace( $css_url, $minified_url, $full_match );
+					}
+					return $full_match;
+				},
+				$html
+			);
+		}
 	}
 	
-	// Process JS files
-	if ( get_option( 'aero_combine_js', 1 ) === 'on' ) {
+	// Process JavaScript files
+	if ( $js_optimize_enabled || $defer_js_enabled ) {
 		$html = preg_replace_callback(
-			'/<script[^>]+src=["\'](https?:\/\/[^"\']+\.js(?:\?[^"\']*)?)["\'][^>]*><\/script>/i',
-			function( $matches ) {
-				$original_tag = $matches[0];
-				$js_url = $matches[1];
+			'/<script([^>]*?)src=["\']([^"\']+\.js(?:\?[^"\']*)?)["\']([^>]*?)><\/script>/i',
+			function( $matches ) use ( $js_optimize_enabled, $defer_js_enabled ) {
+				$full_match = $matches[0];
+				$before = $matches[1];
+				$js_url = $matches[2];
+				$after = $matches[3];
 				
-				// Skip already minified files
-				if ( strpos( $js_url, '.min.js' ) !== false || strpos( $js_url, '/cache/aero/js/' ) !== false ) {
-					return $original_tag;
+				// Skip if already has defer or async
+				if ( strpos( $full_match, 'defer' ) !== false || 
+				     strpos( $full_match, 'async' ) !== false ) {
+					return $full_match;
 				}
 				
-				$minified_url = aero_minify_file( $js_url, 'js' );
-				if ( $minified_url ) {
-					return str_replace( $js_url, $minified_url, $original_tag );
+				// Never defer jQuery or scripts that might be dependencies
+				$is_jquery = ( strpos( $js_url, 'jquery' ) !== false && 
+				              strpos( $js_url, 'jquery-migrate' ) === false );
+				
+				// Check if this is a local file that needs minification
+				$is_local = aero_is_local_url( $js_url );
+				$needs_minification = $is_local && 
+									  $js_optimize_enabled && 
+									  strpos( $js_url, '.min.js' ) === false && 
+									  strpos( $js_url, '/cache/aero/js/' ) === false;
+				
+				// Minify local non-minified files
+				if ( $needs_minification ) {
+					$minified_url = aero_minify_file( $js_url, 'js' );
+					if ( $minified_url ) {
+						$js_url = $minified_url;
+						$full_match = str_replace( $matches[2], $minified_url, $full_match );
+					}
 				}
-				return $original_tag;
+				
+				// Add defer attribute (except for jQuery)
+				if ( $defer_js_enabled && !$is_jquery ) {
+					$full_match = str_replace( '<script', '<script defer', $full_match );
+				}
+				
+				return $full_match;
 			},
 			$html
 		);
 	}
 	
 	return $html;
+}
+
+// Helper function to check if URL is local
+function aero_is_local_url( $url ) {
+	$site_url = site_url();
+	$home_url = home_url();
+	
+	// Normalize URLs for comparison
+	$url_normalized = str_replace( array( 'http://', 'https://' ), '//', $url );
+	$site_url_normalized = str_replace( array( 'http://', 'https://' ), '//', $site_url );
+	$home_url_normalized = str_replace( array( 'http://', 'https://' ), '//', $home_url );
+	
+	// Check if URL starts with site or home URL
+	return ( strpos( $url_normalized, $site_url_normalized ) === 0 || 
+	         strpos( $url_normalized, $home_url_normalized ) === 0 ||
+	         strpos( $url, '/' ) === 0 ); // Relative URLs
 }
 
 function aero_html_minify_start() {
@@ -517,23 +626,14 @@ function aero_minify_file( $file_url, $type ) {
 	}
 
 	// Skip external URLs (only process same-domain files)
-	$site_url = site_url();
-	$home_url = home_url();
-	
-	// Allow both site_url and home_url, and handle protocol-relative URLs
-	$file_url_normalized = str_replace( array( 'http://', 'https://' ), '//', $file_url );
-	$site_url_normalized = str_replace( array( 'http://', 'https://' ), '//', $site_url );
-	$home_url_normalized = str_replace( array( 'http://', 'https://' ), '//', $home_url );
-	
-	if ( strpos( $file_url_normalized, $site_url_normalized ) !== 0 && 
-	     strpos( $file_url_normalized, $home_url_normalized ) !== 0 ) {
+	if ( !aero_is_local_url( $file_url ) ) {
 		return false;
 	}
 
 	$cache_filetype_dir = ( $type === 'js' ? 'js/' : 'css/' );
 	$cache_url = content_url() . '/cache/aero/';
 
-	// Convert URL to file path more reliably
+	// Convert URL to file path
 	$file_path = aero_url_to_path( $file_url );
 	
 	if ( !$file_path || !file_exists( $file_path ) ) {
@@ -582,6 +682,11 @@ function aero_minify_file( $file_url, $type ) {
 function aero_url_to_path( $url ) {
 	// Remove query string
 	$url = strtok( $url, '?' );
+	
+	// Handle relative URLs
+	if ( strpos( $url, '/' ) === 0 && strpos( $url, '//' ) !== 0 ) {
+		$url = site_url( $url );
+	}
 	
 	// Try multiple conversion methods
 	$conversions = array(
