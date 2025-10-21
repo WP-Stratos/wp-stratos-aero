@@ -328,3 +328,134 @@ body.settings_page_aero .aero-footer a {
 	top: 2px !important;
 	position: relative !important;
 }
+
+/* Diagnostics Container */
+body.settings_page_aero .aero-diagnostics-container {
+	background: #171717 !important;
+	border: 1px solid #313131 !important;
+	border-radius: 0 !important;
+	padding: 20px;
+	margin-bottom: 30px;
+}
+
+body.settings_page_aero .aero-diagnostics-container.aero-not-wpstratos {
+	border-color: #ff9800 !important;
+}
+
+body.settings_page_aero .aero-diagnostics-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+	padding-bottom: 15px;
+	border-bottom: 1px solid #313131;
+}
+
+body.settings_page_aero .aero-diagnostics-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: #e5e5e5 !important;
+}
+
+body.settings_page_aero .aero-diagnostics-score {
+	font-size: 14px;
+	color: #2e5aac !important;
+	font-weight: 600;
+}
+
+body.settings_page_aero .aero-diagnostics-list {
+	display: grid;
+	gap: 12px;
+}
+
+body.settings_page_aero .aero-diagnostic-item {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px;
+	background: #0a0a0a !important;
+	border: 1px solid #313131 !important;
+	border-radius: 0 !important;
+}
+
+body.settings_page_aero .aero-diagnostic-item.aero-diagnostic-pass {
+	border-left: 3px solid #059669 !important;
+}
+
+body.settings_page_aero .aero-diagnostic-item.aero-diagnostic-fail {
+	border-left: 3px solid #dc2626 !important;
+}
+
+body.settings_page_aero .aero-diagnostic-item.aero-diagnostic-fail.aero-diagnostic-critical {
+	background: #1a0f0f !important;
+}
+
+body.settings_page_aero .aero-diagnostic-icon {
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+	color: #e5e5e5 !important;
+}
+
+body.settings_page_aero .aero-diagnostic-pass .aero-diagnostic-icon {
+	color: #059669 !important;
+}
+
+body.settings_page_aero .aero-diagnostic-fail .aero-diagnostic-icon {
+	color: #dc2626 !important;
+}
+
+body.settings_page_aero .aero-diagnostic-label {
+	flex: 1;
+	color: #e5e5e5 !important;
+	font-size: 14px;
+}
+
+body.settings_page_aero .aero-diagnostic-extra {
+	color: #999 !important;
+	font-size: 13px;
+	margin-left: 8px;
+}
+
+/* Upgrade Notice */
+body.settings_page_aero .aero-upgrade-notice {
+	margin-top: 20px;
+	padding-top: 20px;
+	border-top: 1px solid #313131;
+}
+
+body.settings_page_aero .aero-upgrade-content {
+	background: #0a0a0a !important;
+	border: 1px solid #ff9800 !important;
+	border-radius: 0 !important;
+	padding: 20px;
+}
+
+body.settings_page_aero .aero-upgrade-text {
+	color: #e5e5e5 !important;
+	font-size: 14px;
+	line-height: 1.6;
+	margin-bottom: 15px;
+}
+
+body.settings_page_aero .aero-upgrade-text strong {
+	color: #ff9800 !important;
+}
+
+body.settings_page_aero .aero-upgrade-button {
+	display: inline-flex;
+	align-items: center;
+	background: #2e5aac !important;
+	color: #fff !important;
+	padding: 10px 20px !important;
+	border-radius: 0 !important;
+	text-decoration: none !important;
+	font-weight: 600;
+	font-size: 14px;
+	transition: background 0.2s ease !important;
+}
+
+body.settings_page_aero .aero-upgrade-button:hover {
+	background: #244a8f !important;
+	color: #fff !important;
+}

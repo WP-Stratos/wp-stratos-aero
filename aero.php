@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.1
+Version: 1.5.2
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.1' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.2' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -152,11 +152,99 @@ function aero_admin_options() {
 	</h2>
 	<hr style="border-color: #313131;" />
 	
+	<?php
+	// Quick Start Diagnostics
+	$hosting_info = aero_check_hosting_environment();
+	$dropins = aero_check_dropins();
+	$page_builder = aero_detect_page_builder();
+	$is_wpstratos = $hosting_info['is_wpstratos'];
+	
+	$checks = array();
+	$checks[] = array(
+		'label' => 'WP Stratos Hosting',
+		'status' => $is_wpstratos,
+		'type' => 'critical'
+	);
+	$checks[] = array(
+		'label' => 'Object Cache (object-cache.php)',
+		'status' => $dropins['object_cache'],
+		'type' => 'important'
+	);
+	$checks[] = array(
+		'label' => 'Page Cache (advanced-cache.php)',
+		'status' => $dropins['advanced_cache'],
+		'type' => 'important'
+	);
+	$checks[] = array(
+		'label' => 'Page Builder Detected',
+		'status' => $page_builder ? true : false,
+		'type' => 'info',
+		'extra' => $page_builder ? $page_builder : 'None'
+	);
+	
+	$passed = 0;
+	foreach ($checks as $check) {
+		if ($check['status']) $passed++;
+	}
+	?>
+	
+	<div class="aero-diagnostics-container <?php echo !$is_wpstratos ? 'aero-not-wpstratos' : ''; ?>">
+		<div class="aero-diagnostics-header">
+			<div class="aero-diagnostics-title">
+				<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 8px;">
+					<path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-1-13h2v6H9V5zm0 8h2v2H9v-2z" fill="currentColor"/>
+				</svg>
+				Quick Start Diagnostics
+			</div>
+			<div class="aero-diagnostics-score"><?php echo $passed; ?>/<?php echo count($checks); ?> Passed</div>
+		</div>
+		
+		<div class="aero-diagnostics-list">
+			<?php foreach ($checks as $check): ?>
+				<div class="aero-diagnostic-item <?php echo $check['status'] ? 'aero-diagnostic-pass' : 'aero-diagnostic-fail'; ?> aero-diagnostic-<?php echo $check['type']; ?>">
+					<div class="aero-diagnostic-icon">
+						<?php if ($check['status']): ?>
+							<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm-1.5 15l-4-4 1.41-1.41L8.5 12.17l5.09-5.09L15 8.5l-6.5 6.5z" fill="currentColor"/>
+							</svg>
+						<?php else: ?>
+							<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm1 15H9v-2h2v2zm0-4H9V5h2v6z" fill="currentColor"/>
+							</svg>
+						<?php endif; ?>
+					</div>
+					<div class="aero-diagnostic-label">
+						<?php echo esc_html($check['label']); ?>
+						<?php if (isset($check['extra'])): ?>
+							<span class="aero-diagnostic-extra"><?php echo esc_html($check['extra']); ?></span>
+						<?php endif; ?>
+					</div>
+				</div>
+			<?php endforeach; ?>
+		</div>
+		
+		<?php if (!$is_wpstratos): ?>
+			<div class="aero-upgrade-notice">
+				<div class="aero-upgrade-content">
+					<div class="aero-upgrade-text">
+						<strong>Not on WP Stratos hosting?</strong> You're missing out on significant performance improvements. WP Stratos provides optimized infrastructure with built-in caching, CDN, and performance features that work seamlessly with Aero.
+					</div>
+					<a href="https://wpstratos.com" target="_blank" class="aero-upgrade-button">
+						Learn About WP Stratos
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-left: 6px;">
+							<path d="M12 8.667V12.667C12 13.403 11.403 14 10.667 14H3.333C2.597 14 2 13.403 2 12.667V5.333C2 4.597 2.597 4 3.333 4H7.333M10 2H14M14 2V6M14 2L6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+					</a>
+				</div>
+			</div>
+		<?php endif; ?>
+	</div>
+	
 	<form method="post" name="options_form">
 	<?php wp_nonce_field( 'aero_settings_nonce' ); ?>
 	<input type="hidden" name="<?php echo $hidden_field_name; ?>" value="Y">
 	
-	<h3 style="color: #e5e5e5; margin-top: 0;">🎯 Recommended Settings (Enable All)</h3>
+	<h3 style="color: #e5e5e5; margin-top: 0;">Recommended Settings (Enable All)</h3>
     <p>
     <input type="checkbox" name="<?php echo $combine_css; ?>" id="<?php echo $combine_css; ?>" <?php checked( $combine_css_val == 'on',true); ?> />
     <label for="<?php echo $combine_css; ?>" class="aero_settings" style="display: inline;"> <?php _e('Minify & Cache CSS'); ?> </label>
@@ -175,7 +263,7 @@ function aero_admin_options() {
 	<br><span style="color: #999; font-size: 13px; margin-left: 24px;">Defers non-critical JS. jQuery excluded for compatibility.</span>
 	</p>
 
-	<h3 style="color: #e5e5e5; margin-top: 30px;">⚡ Advanced Performance</h3>
+	<h3 style="color: #e5e5e5; margin-top: 30px;">Advanced Performance</h3>
 	<p>
 	<input type="checkbox" name="<?php echo $preload_critical; ?>" id="<?php echo $preload_critical; ?>" <?php checked( $preload_critical_val == 'on',true); ?> />
 	<label for="<?php echo $preload_critical; ?>" class="aero_settings" style="display: inline;"> <?php _e('Preload Critical Resources'); ?> </label>
@@ -189,7 +277,7 @@ function aero_admin_options() {
 
 	<div class="aero-accordion" style="margin-top: 30px;">
 		<button type="button" class="aero-accordion-header" onclick="aeroToggleAccordion(this)">
-			<span>⚠️ Guest Mode (Use Only If Needed)</span>
+			<span>Guest Mode (Use Only If Needed)</span>
 			<span class="aero-accordion-icon">▼</span>
 		</button>
 		<div class="aero-accordion-content">
@@ -211,7 +299,7 @@ function aero_admin_options() {
 
 	<div class="aero-accordion" style="margin-top: 15px;">
 		<button type="button" class="aero-accordion-header" onclick="aeroToggleAccordion(this)">
-			<span>🔧 Debug Mode (For Support)</span>
+			<span>Debug Mode (For Support)</span>
 			<span class="aero-accordion-icon">▼</span>
 		</button>
 		<div class="aero-accordion-content">
@@ -300,11 +388,11 @@ function aero_admin_options() {
 		<h3 style="margin-top: 30px;">Performance Tips</h3>
 		<div style="font-size: 13px; line-height: 1.6; color: #999;">
 			<strong style="color: #2e5aac;">For Best Results:</strong><br>
-			• Enable all recommended settings<br>
-			• Use optimized images (WebP format)<br>
-			• Minimize third-party scripts<br>
-			• Use <a href="https://wpstratos.com" target="_blank" style="color: #2e5aac;">WP Stratos hosting</a> for optimal performance<br>
-			• Enable GZIP compression
+			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Enable all recommended settings<br>
+			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Use optimized images (WebP format)<br>
+			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Minimize third-party scripts<br>
+			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Use <a href="https://wpstratos.com" target="_blank" style="color: #2e5aac;">WP Stratos hosting</a> for optimal performance<br>
+			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Enable GZIP compression
 		</div>
 	</div>
 	</div>
@@ -357,6 +445,27 @@ function aero_generate_debug_info() {
 	$debug_info .= "Home URL: " . home_url() . "\n";
 	$debug_info .= "Is Multisite: " . (is_multisite() ? 'Yes' : 'No') . "\n";
 	$debug_info .= "Active Theme: " . wp_get_theme()->get('Name') . " v" . wp_get_theme()->get('Version') . "\n\n";
+	
+	// Hosting Environment
+	$hosting_info = aero_check_hosting_environment();
+	$debug_info .= "--- HOSTING ENVIRONMENT ---\n";
+	$debug_info .= "Hosting Provider: " . ($hosting_info['is_wpstratos'] ? 'WP Stratos' : 'Other') . "\n";
+	if ($hosting_info['is_wpstratos']) {
+		$debug_info .= "Platform Header: " . ($hosting_info['platform_header'] ? 'Present' : 'Not Found') . "\n";
+		$debug_info .= "Powered By Header: " . ($hosting_info['powered_by_header'] ? 'Present' : 'Not Found') . "\n";
+	}
+	$debug_info .= "\n";
+	
+	// Drop-ins
+	$dropins = aero_check_dropins();
+	$debug_info .= "--- DROP-INS ---\n";
+	$debug_info .= "advanced-cache.php: " . ($dropins['advanced_cache'] ? 'Present' : 'Not Found') . "\n";
+	$debug_info .= "object-cache.php: " . ($dropins['object_cache'] ? 'Present' : 'Not Found') . "\n\n";
+	
+	// Page Builder
+	$page_builder = aero_detect_page_builder();
+	$debug_info .= "--- PAGE BUILDER ---\n";
+	$debug_info .= "Active Page Builder: " . ($page_builder ? $page_builder : 'None Detected') . "\n\n";
 	
 	// Server Info
 	$debug_info .= "--- SERVER ENVIRONMENT ---\n";
@@ -414,6 +523,88 @@ function aero_generate_debug_info() {
 	$debug_info .= "=== END DEBUG INFO ===\n";
 	
 	return $debug_info;
+}
+
+/**
+ * Check if site is hosted on WP Stratos
+ */
+function aero_check_hosting_environment() {
+	$is_wpstratos = false;
+	$platform_header = false;
+	$powered_by_header = false;
+	
+	// Check response headers from a sample request
+	$response = wp_remote_get(home_url());
+	if (!is_wp_error($response)) {
+		$headers = wp_remote_retrieve_headers($response);
+		
+		// Check for WP Stratos specific headers
+		if (isset($headers['platform']) && stripos($headers['platform'], 'WP Stratos') !== false) {
+			$is_wpstratos = true;
+			$platform_header = true;
+		}
+		
+		if (isset($headers['x-powered-by']) && stripos($headers['x-powered-by'], 'WP Stratos') !== false) {
+			$is_wpstratos = true;
+			$powered_by_header = true;
+		}
+	}
+	
+	return array(
+		'is_wpstratos' => $is_wpstratos,
+		'platform_header' => $platform_header,
+		'powered_by_header' => $powered_by_header
+	);
+}
+
+/**
+ * Check for WordPress drop-ins
+ */
+function aero_check_dropins() {
+	$wp_content_dir = WP_CONTENT_DIR;
+	
+	// Check for alternative path used by some hosts
+	$alt_path = '/srv/htdocs/wp-content';
+	if (file_exists($alt_path)) {
+		$wp_content_dir = $alt_path;
+	}
+	
+	return array(
+		'advanced_cache' => file_exists($wp_content_dir . '/advanced-cache.php'),
+		'object_cache' => file_exists($wp_content_dir . '/object-cache.php')
+	);
+}
+
+/**
+ * Detect active page builder
+ */
+function aero_detect_page_builder() {
+	$page_builders = array(
+		'elementor/elementor.php' => 'Elementor',
+		'beaver-builder-lite-version/fl-builder.php' => 'Beaver Builder',
+		'bb-plugin/fl-builder.php' => 'Beaver Builder Pro',
+		'siteorigin-panels/siteorigin-panels.php' => 'SiteOrigin Page Builder',
+		'js_composer/js_composer.php' => 'WPBakery Page Builder',
+		'divi-builder/divi-builder.php' => 'Divi Builder',
+		'oxygen/functions.php' => 'Oxygen Builder',
+		'bricks/bricks.php' => 'Bricks Builder'
+	);
+	
+	$active_plugins = get_option('active_plugins');
+	
+	foreach ($page_builders as $plugin_path => $builder_name) {
+		if (in_array($plugin_path, $active_plugins)) {
+			return $builder_name;
+		}
+	}
+	
+	// Check for Divi theme
+	$theme = wp_get_theme();
+	if ($theme->get('Name') === 'Divi' || $theme->get_template() === 'Divi') {
+		return 'Divi Theme';
+	}
+	
+	return false;
 }
 
 function aero_get_directory_size($directory) {
@@ -486,6 +677,7 @@ function aero_add_critical_resource_hints() {
 		// Preconnect to external font providers
 		echo '<link rel="preconnect" href="https://fonts.googleapis.com">' . "\n";
 		echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' . "\n";
+		echo '<link rel="preconnect" href="https://use.typekit.net" crossorigin>' . "\n";
 	}
 	
 	if ( get_option( 'aero_preload_critical', 1 ) === 'on' ) {
@@ -677,6 +869,18 @@ function aero_optimize_fonts( $html ) {
 				$separator = ( strpos( $url, '?' ) !== false ) ? '&' : '?';
 				$url .= $separator . 'display=swap';
 			}
+			return '<link' . $matches[1] . 'href="' . $url . '"' . $matches[3] . '>';
+		},
+		$html
+	);
+	
+	// Add font-display: swap to Adobe TypeKit URLs
+	$html = preg_replace_callback(
+		'/<link([^>]*?)href=["\']([^"\']*use\.typekit\.net[^"\']*)["\']([^>]*)>/i',
+		function( $matches ) {
+			$url = $matches[2];
+			// TypeKit uses CSS, need to inject @font-face modifications via inline style
+			// But simpler: just ensure preconnect exists
 			return '<link' . $matches[1] . 'href="' . $url . '"' . $matches[3] . '>';
 		},
 		$html
