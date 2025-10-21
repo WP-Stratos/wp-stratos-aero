@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.2
+Version: 1.5.3
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.2' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.3' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -229,7 +229,7 @@ function aero_admin_options() {
 					<div class="aero-upgrade-text">
 						<strong>Not on WP Stratos hosting?</strong> You're missing out on significant performance improvements. WP Stratos provides optimized infrastructure with built-in caching, CDN, and performance features that work seamlessly with Aero.
 					</div>
-					<a style="color:#ffffff !important;" href="https://wpstratos.com" target="_blank" class="aero-upgrade-button">
+					<a href="https://wpstratos.com" target="_blank" class="aero-upgrade-button">
 						Learn About WP Stratos
 						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-left: 6px;">
 							<path d="M12 8.667V12.667C12 13.403 11.403 14 10.667 14H3.333C2.597 14 2 13.403 2 12.667V5.333C2 4.597 2.597 4 3.333 4H7.333M10 2H14M14 2V6M14 2L6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -534,19 +534,26 @@ function aero_check_hosting_environment() {
 	$powered_by_header = false;
 	
 	// Check response headers from a sample request
-	$response = wp_remote_get(home_url());
+	$response = wp_remote_get(home_url(), array('timeout' => 5));
 	if (!is_wp_error($response)) {
 		$headers = wp_remote_retrieve_headers($response);
 		
 		// Check for WP Stratos specific headers
-		if (isset($headers['platform']) && stripos($headers['platform'], 'WP Stratos') !== false) {
-			$is_wpstratos = true;
-			$platform_header = true;
+		// Headers can be string or array, handle both
+		if (isset($headers['platform'])) {
+			$platform_value = is_array($headers['platform']) ? implode(' ', $headers['platform']) : $headers['platform'];
+			if (stripos($platform_value, 'WP Stratos') !== false) {
+				$is_wpstratos = true;
+				$platform_header = true;
+			}
 		}
 		
-		if (isset($headers['x-powered-by']) && stripos($headers['x-powered-by'], 'WP Stratos') !== false) {
-			$is_wpstratos = true;
-			$powered_by_header = true;
+		if (isset($headers['x-powered-by'])) {
+			$powered_value = is_array($headers['x-powered-by']) ? implode(' ', $headers['x-powered-by']) : $headers['x-powered-by'];
+			if (stripos($powered_value, 'WP Stratos') !== false) {
+				$is_wpstratos = true;
+				$powered_by_header = true;
+			}
 		}
 	}
 	
@@ -563,15 +570,21 @@ function aero_check_hosting_environment() {
 function aero_check_dropins() {
 	$wp_content_dir = WP_CONTENT_DIR;
 	
-	// Check for alternative path used by some hosts
+	// Try alternative path used by some hosts, but handle open_basedir restrictions
 	$alt_path = '/srv/htdocs/wp-content';
-	if (file_exists($alt_path)) {
+	
+	// Check if we can access alternative path (respects open_basedir)
+	if (@file_exists($alt_path) && @is_dir($alt_path)) {
 		$wp_content_dir = $alt_path;
 	}
 	
+	// Use @ to suppress warnings for open_basedir restrictions
+	$advanced_cache = @file_exists($wp_content_dir . '/advanced-cache.php');
+	$object_cache = @file_exists($wp_content_dir . '/object-cache.php');
+	
 	return array(
-		'advanced_cache' => file_exists($wp_content_dir . '/advanced-cache.php'),
-		'object_cache' => file_exists($wp_content_dir . '/object-cache.php')
+		'advanced_cache' => $advanced_cache,
+		'object_cache' => $object_cache
 	);
 }
 
