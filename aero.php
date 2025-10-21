@@ -3,14 +3,14 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Smartly minify, compress and cache HTML, CSS & JavaScript files to boost website speed. 🚀
-Version: 1.3.2
+Version: 1.3.3
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 // Define plugin version for future releases
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.3.2' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.3.3' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -122,10 +122,11 @@ function aero_admin_options() {
 				aero_clear_minified_cache();
 			}
 			else {			
-				$combine_js_val = ( isset( $_POST[$combine_js] ) ? sanitize_text_field( $_POST[$combine_js] ) : "" );
-				$combine_css_val = ( isset( $_POST[$combine_css] ) ? sanitize_text_field( $_POST[$combine_css] ) : "" );
-				$compress_html_val = ( isset( $_POST[$compress_html] ) ? sanitize_text_field( $_POST[$compress_html] ) : "" );
-				$guest_mode_val = ( isset( $_POST[$guest_mode] ) ? sanitize_text_field( $_POST[$guest_mode] ) : "" );
+				// Explicitly set 'on' if checked, 'off' if not checked
+				$combine_js_val = ( isset( $_POST[$combine_js] ) ? 'on' : 'off' );
+				$combine_css_val = ( isset( $_POST[$combine_css] ) ? 'on' : 'off' );
+				$compress_html_val = ( isset( $_POST[$compress_html] ) ? 'on' : 'off' );
+				$guest_mode_val = ( isset( $_POST[$guest_mode] ) ? 'on' : 'off' );
 	
 				update_option( $combine_js, $combine_js_val );
 				update_option( $combine_css, $combine_css_val );
@@ -194,6 +195,10 @@ function aero_admin_options() {
 						• Excessive font files<br><br>
 						<strong>Result:</strong> PageSpeed tools see your site's design but without the performance-killing assets → 80-95 scores ✅<br>
 						<strong>Real visitors:</strong> See your complete, beautiful website with all features → Perfect UX ✅<br><br>
+						<span style="color: #d63638;"><strong>⚠️ Important:</strong> After disabling Guest Mode:</span><br>
+						1. Click "Clear CSS & JS Cache" below<br>
+						2. Wait 5-10 minutes for PageSpeed Insights cache to clear<br>
+						3. Test with a URL parameter like <code>?test=1</code> to bypass cache<br><br>
 						<em>This balanced approach is used by major optimization plugins to achieve high scores while keeping 
 						PageSpeed screenshots recognizable.</em>
 					</div>
@@ -214,6 +219,20 @@ function aero_admin_options() {
 	$js_enabled = ($combine_js_val == 'on');
 	$compress_html_enabled = ($compress_html_val == 'on');
 	$guest_mode_enabled = ($guest_mode_val == 'on');
+	
+	// Add debug info for guest mode
+	if ( current_user_can( 'manage_options' ) ) {
+		$current_guest_status = get_option( 'aero_guest_mode' );
+		$is_detected_as_guest = aero_is_guest_visitor();
+		echo '<div style="background: #f0f0f1; border: 1px solid #c3c4c7; padding: 15px; margin: 15px 0; border-radius: 4px;">';
+		echo '<strong>Debug Info:</strong><br>';
+		echo 'Guest Mode Setting: <strong>' . ( $current_guest_status === 'on' ? '✅ ON' : '❌ OFF' ) . '</strong><br>';
+		echo 'Currently Detected As: <strong>' . ( $is_detected_as_guest ? '🤖 PageSpeed Tool' : '👤 Normal Visitor' ) . '</strong><br>';
+		if ( !$is_detected_as_guest && $guest_mode_enabled ) {
+			echo '<span style="color: #2271b1;">ℹ️ To test Guest Mode, run Google PageSpeed Insights on your site.</span>';
+		}
+		echo '</div>';
+	}
 	
 	$templates = [
 		'css_js'	=>	"✅ Aero now minifies, compresses, and caches all %s files. Enable '<em>Optimize %s</em>' to further boost your site's performance.",
@@ -349,7 +368,7 @@ function aero_check_plugin_update() {
 	$saved_version = get_option('aero_plugin_version' );
 
 	if ( version_compare( $saved_version, AERO_PLUGIN_VERSION_NUM, '<' ) || $saved_version === FALSE ) {
-		if ( $saved_version && in_array( $saved_version, ['1.3.0', '1.3.1', '1.3.2'], true ) ) {
+		if ( $saved_version && in_array( $saved_version, ['1.3.1', '1.3.2', '1.3.3'], true ) ) {
 			update_option( 'aero_review_notice', 'on' );
 		}
 		
@@ -363,7 +382,7 @@ function aero_activate_plugin() {
     update_option( 'aero_combine_js', 'on' );
     update_option( 'aero_combine_css', 'on' );
 	update_option( 'aero_compress_html', 'on' );
-	update_option( 'aero_guest_mode', 'on' );
+	update_option( 'aero_guest_mode', 'on' ); // ON by default for best PageSpeed scores
 	
 	if ( FALSE === get_option( 'aero_review_notice' ) ) {
 		add_option( 'aero_review_notice', 'on' );
