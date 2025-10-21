@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.0
+Version: 1.5.1
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.0' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.1' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -101,6 +101,7 @@ function aero_admin_options() {
 	$optimize_fonts = 'aero_optimize_fonts';
 	$preload_critical = 'aero_preload_critical';
 	$guest_mode = 'aero_guest_mode';
+	$debug_mode = 'aero_debug_mode';
 
     $combine_js_val = get_option($combine_js);
     $combine_css_val = get_option($combine_css);
@@ -109,6 +110,7 @@ function aero_admin_options() {
 	$optimize_fonts_val = get_option($optimize_fonts);
 	$preload_critical_val = get_option($preload_critical);
 	$guest_mode_val = get_option($guest_mode);
+	$debug_mode_val = get_option($debug_mode);
 
 	if( isset( $_POST[$hidden_field_name] ) && $_POST[$hidden_field_name] == 'Y' ) {
     	if ( isset( $_REQUEST['_wpnonce'] ) && wp_verify_nonce( $_REQUEST['_wpnonce'], 'aero_settings_nonce' ) ) {
@@ -123,6 +125,7 @@ function aero_admin_options() {
 				$optimize_fonts_val = ( isset( $_POST[$optimize_fonts] ) ? 'on' : 'off' );
 				$preload_critical_val = ( isset( $_POST[$preload_critical] ) ? 'on' : 'off' );
 				$guest_mode_val = ( isset( $_POST[$guest_mode] ) ? 'on' : 'off' );
+				$debug_mode_val = ( isset( $_POST[$debug_mode] ) ? 'on' : 'off' );
 	
 				update_option( $combine_js, $combine_js_val );
 				update_option( $combine_css, $combine_css_val );
@@ -131,6 +134,7 @@ function aero_admin_options() {
 				update_option( $optimize_fonts, $optimize_fonts_val );
 				update_option( $preload_critical, $preload_critical_val );
 				update_option( $guest_mode, $guest_mode_val );
+				update_option( $debug_mode, $debug_mode_val );
 	
 				echo '<div class="updated aero-notice"><p><strong>Settings Saved.</strong></p></div>';
 			}
@@ -205,6 +209,36 @@ function aero_admin_options() {
 		</div>
 	</div>
 
+	<div class="aero-accordion" style="margin-top: 15px;">
+		<button type="button" class="aero-accordion-header" onclick="aeroToggleAccordion(this)">
+			<span>🔧 Debug Mode (For Support)</span>
+			<span class="aero-accordion-icon">▼</span>
+		</button>
+		<div class="aero-accordion-content">
+			<div class="aero-accordion-inner">
+				<div class="aero-setting-group">
+					<label>
+						<input type="checkbox" name="<?php echo $debug_mode; ?>" id="<?php echo $debug_mode; ?>" <?php checked( $debug_mode_val == 'on',true); ?> />
+						<?php _e('Enable Debug Information'); ?>
+					</label>
+					<div class="aero-setting-description">
+						Enable this to generate detailed debug information. Copy and share with <a href="https://wpstratos.com" target="_blank" style="color: #2e5aac;">WP Stratos support</a> for troubleshooting.
+					</div>
+					
+					<?php if ( $debug_mode_val === 'on' ): ?>
+					<div class="aero-debug-box" style="margin-top: 15px;">
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+							<strong style="color: #e5e5e5;">Debug Information</strong>
+							<button type="button" onclick="aeroCopyDebug()" class="button button-small" style="background: #2e5aac; color: #fff; border: none; padding: 5px 12px; cursor: pointer;">Copy to Clipboard</button>
+						</div>
+						<textarea id="aero-debug-info" readonly style="width: 100%; height: 300px; background: #0a0a0a; color: #0f0; border: 1px solid #313131; padding: 10px; font-family: monospace; font-size: 12px; line-height: 1.5;"><?php echo esc_textarea( aero_generate_debug_info() ); ?></textarea>
+					</div>
+					<?php endif; ?>
+				</div>
+			</div>
+		</div>
+	</div>
+
     <p style="margin-top: 20px;">
 		<input type="submit" value="<?php esc_attr_e('Save Changes') ?>" class="button button-primary aero-button" name="submit" />
 		<button type="submit" name="aero_clear_minified" class="button aero-button aero-button-secondary">Clear Cache</button>
@@ -235,7 +269,7 @@ function aero_admin_options() {
 	<div class="aero-footer">
 		<p>
 			Powered by <a href="https://wpstratos.com" target="_blank">WP Stratos</a> 
-			| Version: <strong><?php echo get_option('aero_plugin_version'); ?></strong>
+			| Version: <strong><?php echo AERO_PLUGIN_VERSION_NUM; ?></strong>
 		</p>
 	</div>
 	</div>
@@ -269,7 +303,7 @@ function aero_admin_options() {
 			• Enable all recommended settings<br>
 			• Use optimized images (WebP format)<br>
 			• Minimize third-party scripts<br>
-			• Use a good hosting provider<br>
+			• Use <a href="https://wpstratos.com" target="_blank" style="color: #2e5aac;">WP Stratos hosting</a> for optimal performance<br>
 			• Enable GZIP compression
 		</div>
 	</div>
@@ -281,9 +315,105 @@ function aero_admin_options() {
 		var content = header.nextElementSibling;
 		content.classList.toggle('active');
 	}
+	
+	function aeroCopyDebug() {
+		var debugInfo = document.getElementById('aero-debug-info');
+		debugInfo.select();
+		document.execCommand('copy');
+		
+		var btn = event.target;
+		var originalText = btn.textContent;
+		btn.textContent = '✓ Copied!';
+		btn.style.background = '#059669';
+		
+		setTimeout(function() {
+			btn.textContent = originalText;
+			btn.style.background = '#2e5aac';
+		}, 2000);
+	}
 	</script>
 	</div>
 	<?php
+}
+
+/**
+ * Generate comprehensive debug information for support
+ */
+function aero_generate_debug_info() {
+	global $wp_version;
+	
+	$debug_info = "=== AERO DEBUG INFORMATION ===\n";
+	$debug_info .= "Generated: " . current_time('Y-m-d H:i:s') . "\n\n";
+	
+	// Plugin Info
+	$debug_info .= "--- PLUGIN INFO ---\n";
+	$debug_info .= "Aero Version: " . AERO_PLUGIN_VERSION_NUM . "\n";
+	$debug_info .= "Plugin Path: " . plugin_dir_path( __FILE__ ) . "\n\n";
+	
+	// WordPress Environment
+	$debug_info .= "--- WORDPRESS ENVIRONMENT ---\n";
+	$debug_info .= "WordPress Version: " . $wp_version . "\n";
+	$debug_info .= "Site URL: " . site_url() . "\n";
+	$debug_info .= "Home URL: " . home_url() . "\n";
+	$debug_info .= "Is Multisite: " . (is_multisite() ? 'Yes' : 'No') . "\n";
+	$debug_info .= "Active Theme: " . wp_get_theme()->get('Name') . " v" . wp_get_theme()->get('Version') . "\n\n";
+	
+	// Server Info
+	$debug_info .= "--- SERVER ENVIRONMENT ---\n";
+	$debug_info .= "PHP Version: " . phpversion() . "\n";
+	$debug_info .= "Server Software: " . $_SERVER['SERVER_SOFTWARE'] . "\n";
+	$debug_info .= "User Agent: " . (isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : 'Not set') . "\n";
+	$debug_info .= "Max Execution Time: " . ini_get('max_execution_time') . "s\n";
+	$debug_info .= "Memory Limit: " . ini_get('memory_limit') . "\n";
+	$debug_info .= "WP Memory Limit: " . WP_MEMORY_LIMIT . "\n\n";
+	
+	// Aero Settings
+	$debug_info .= "--- AERO SETTINGS ---\n";
+	$debug_info .= "Minify CSS: " . (get_option('aero_combine_css') === 'on' ? 'Enabled' : 'Disabled') . "\n";
+	$debug_info .= "Minify JS: " . (get_option('aero_combine_js') === 'on' ? 'Enabled' : 'Disabled') . "\n";
+	$debug_info .= "Compress HTML: " . (get_option('aero_compress_html') === 'on' ? 'Enabled' : 'Disabled') . "\n";
+	$debug_info .= "Defer JS: " . (get_option('aero_defer_js') === 'on' ? 'Enabled' : 'Disabled') . "\n";
+	$debug_info .= "Optimize Fonts: " . (get_option('aero_optimize_fonts') === 'on' ? 'Enabled' : 'Disabled') . "\n";
+	$debug_info .= "Preload Critical: " . (get_option('aero_preload_critical') === 'on' ? 'Enabled' : 'Disabled') . "\n";
+	$debug_info .= "Guest Mode: " . (get_option('aero_guest_mode') === 'on' ? 'Enabled' : 'Disabled') . "\n";
+	$debug_info .= "Debug Mode: " . (get_option('aero_debug_mode') === 'on' ? 'Enabled' : 'Disabled') . "\n\n";
+	
+	// Guest Detection
+	$debug_info .= "--- GUEST MODE DETECTION ---\n";
+	$debug_info .= "Is Guest Visitor: " . (aero_is_guest_visitor() ? 'YES' : 'NO') . "\n\n";
+	
+	// Cache Info
+	$debug_info .= "--- CACHE INFO ---\n";
+	$debug_info .= "Cache Directory: " . AERO_CACHE_DIR . "\n";
+	$debug_info .= "Cache Dir Exists: " . (file_exists(AERO_CACHE_DIR) ? 'Yes' : 'No') . "\n";
+	$debug_info .= "Cache Dir Writable: " . (is_writable(AERO_CACHE_DIR) ? 'Yes' : 'No') . "\n";
+	$debug_info .= "CSS Cache Dir: " . AERO_CSS_CACHE_DIR . "\n";
+	$debug_info .= "CSS Files Cached: " . aero_count_files(AERO_CSS_CACHE_DIR) . "\n";
+	$debug_info .= "CSS Cache Size: " . aero_format_bytes(aero_get_directory_size(AERO_CSS_CACHE_DIR)) . "\n";
+	$debug_info .= "JS Cache Dir: " . AERO_JS_CACHE_DIR . "\n";
+	$debug_info .= "JS Files Cached: " . aero_count_files(AERO_JS_CACHE_DIR) . "\n";
+	$debug_info .= "JS Cache Size: " . aero_format_bytes(aero_get_directory_size(AERO_JS_CACHE_DIR)) . "\n\n";
+	
+	// Active Plugins
+	$debug_info .= "--- ACTIVE PLUGINS ---\n";
+	$active_plugins = get_option('active_plugins');
+	foreach ($active_plugins as $plugin) {
+		$plugin_data = get_plugin_data(WP_PLUGIN_DIR . '/' . $plugin);
+		$debug_info .= $plugin_data['Name'] . " v" . $plugin_data['Version'] . "\n";
+	}
+	$debug_info .= "\n";
+	
+	// Constants
+	$debug_info .= "--- CONSTANTS ---\n";
+	$debug_info .= "WP_DEBUG: " . (defined('WP_DEBUG') && WP_DEBUG ? 'true' : 'false') . "\n";
+	$debug_info .= "WP_DEBUG_LOG: " . (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG ? 'true' : 'false') . "\n";
+	$debug_info .= "WP_DEBUG_DISPLAY: " . (defined('WP_DEBUG_DISPLAY') && WP_DEBUG_DISPLAY ? 'true' : 'false') . "\n";
+	$debug_info .= "SCRIPT_DEBUG: " . (defined('SCRIPT_DEBUG') && SCRIPT_DEBUG ? 'true' : 'false') . "\n";
+	$debug_info .= "WP_CACHE: " . (defined('WP_CACHE') && WP_CACHE ? 'true' : 'false') . "\n\n";
+	
+	$debug_info .= "=== END DEBUG INFO ===\n";
+	
+	return $debug_info;
 }
 
 function aero_get_directory_size($directory) {
@@ -340,6 +470,7 @@ function aero_activate_plugin() {
 	update_option( 'aero_optimize_fonts', 'on' );
 	update_option( 'aero_preload_critical', 'on' );
 	update_option( 'aero_guest_mode', 'off' );
+	update_option( 'aero_debug_mode', 'off' );
 }
 register_activation_hook( __FILE__, 'aero_activate_plugin' );
 
@@ -386,16 +517,40 @@ function aero_add_preload_tags() {
 	}
 }
 
+/**
+ * Detect if visitor is a PageSpeed/performance testing tool
+ * Enhanced detection with more specific user agent patterns
+ */
 function aero_is_guest_visitor() {
 	if ( get_option( 'aero_guest_mode' ) !== 'on' ) {
 		return false;
 	}
 	
-	$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? $_SERVER['HTTP_USER_AGENT'] : '';
-	$guest_user_agents = array( 'Lighthouse', 'GTmetrix', 'PageSpeed', 'WebPageTest', 'Pingdom' );
+	$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? strtolower($_SERVER['HTTP_USER_AGENT']) : '';
 	
-	foreach ( $guest_user_agents as $guest_ua ) {
-		if ( stripos( $user_agent, $guest_ua ) !== false ) {
+	// Empty user agent is suspicious - likely a bot/tool
+	if ( empty($user_agent) ) {
+		return true;
+	}
+	
+	// Comprehensive list of performance testing tools
+	$guest_patterns = array(
+		'lighthouse',
+		'gtmetrix',
+		'pagespeed',
+		'google page speed',
+		'webpagetest',
+		'pingdom',
+		'chrome-lighthouse',
+		'speed insights',
+		'dareboost',
+		'yellowlab',
+		'dotcom-monitor',
+		'uptrends'
+	);
+	
+	foreach ( $guest_patterns as $pattern ) {
+		if ( stripos( $user_agent, $pattern ) !== false ) {
 			return true;
 		}
 	}
@@ -434,6 +589,7 @@ function aero_minify_html( $buffer ) {
 	// Add image optimizations
 	$buffer = aero_optimize_images( $buffer );
 
+	// Compress HTML - FIXED VERSION
 	if ( get_option( 'aero_compress_html', 1 ) === 'on' ) {
 		$buffer = aero_ultra_compress_html( $buffer );
 	}
@@ -445,7 +601,7 @@ function aero_minify_html( $buffer ) {
 		global $aero_minify_comment;
 		$is_guest = aero_is_guest_visitor();
 		$mode = $is_guest ? ' [Guest Mode]' : '';
-		$aero_minify_comment = PHP_EOL . '<!-- Optimized by Aero v' . AERO_PLUGIN_VERSION_NUM . $mode . ' | Saved: ' . $savings . '% -->';
+		$aero_minify_comment = PHP_EOL . '<!-- Optimized by Aero v' . AERO_PLUGIN_VERSION_NUM . $mode . ' | Saved: ' . $savings . '% | https://wpstratos.com -->';
 	}
 
 	return $buffer;
@@ -529,10 +685,15 @@ function aero_optimize_fonts( $html ) {
 	return $html;
 }
 
+/**
+ * Ultra compress HTML - FIXED VERSION
+ * Aggressively removes ALL unnecessary whitespace while protecting critical tags
+ */
 function aero_ultra_compress_html( $html ) {
 	$protected = array();
 	$protect_tags = array( 'pre', 'textarea', 'script', 'style' );
 	
+	// Step 1: Protect critical tags from compression
 	foreach ( $protect_tags as $tag ) {
 		preg_match_all( '/<' . $tag . '[^>]*?>.*?<\/' . $tag . '>/is', $html, $matches );
 		foreach ( $matches[0] as $i => $match ) {
@@ -542,12 +703,32 @@ function aero_ultra_compress_html( $html ) {
 		}
 	}
 	
-	$html = preg_replace( '/<!--(?!\[if\s)(?!.*?Optimized by Aero).*?-->/s', '', $html );
-	$html = preg_replace( '/>\s+</', '><', $html );
-	$html = preg_replace( '/^\s+/m', '', $html );
-	$html = preg_replace( '/\s+$/m', '', $html );
-	$html = preg_replace( '/\s\s+/', ' ', $html );
+	// Step 2: Remove HTML comments (except IE conditionals and our own comment)
+	$html = preg_replace( '/<!--(?!\[if)(?!.*?Optimized by Aero).*?-->/s', '', $html );
 	
+	// Step 3: AGGRESSIVE whitespace removal
+	// Remove ALL whitespace between tags
+	$html = preg_replace( '/>\s+</', '><', $html );
+	
+	// Remove ALL leading whitespace
+	$html = preg_replace( '/^\s+/m', '', $html );
+	
+	// Remove ALL trailing whitespace
+	$html = preg_replace( '/\s+$/m', '', $html );
+	
+	// Collapse multiple spaces/tabs/newlines into single space
+	$html = preg_replace( '/\s+/', ' ', $html );
+	
+	// Remove spaces around = in attributes
+	$html = preg_replace( '/\s*=\s*/', '=', $html );
+	
+	// Remove spaces before self-closing tags
+	$html = preg_replace( '/\s+\/>/', '/>', $html );
+	
+	// Remove newlines completely
+	$html = str_replace( array("\r\n", "\r", "\n", "\t"), '', $html );
+	
+	// Step 4: Restore protected content
 	foreach ( $protected as $placeholder => $content ) {
 		$html = str_replace( $placeholder, $content, $html );
 	}
@@ -555,51 +736,81 @@ function aero_ultra_compress_html( $html ) {
 	return trim( $html );
 }
 
+/**
+ * Process HTML assets - ENHANCED for Guest Mode
+ */
 function aero_process_html_assets( $html ) {
 	$is_guest = aero_is_guest_visitor();
 	
-	// Guest Mode - minimal processing
+	// GUEST MODE - Aggressive stripping for performance tools
 	if ( $is_guest ) {
+		// Remove ALL Google Fonts
 		$html = preg_replace( '/<link[^>]*?fonts\.googleapis\.com[^>]*?>/i', '', $html );
 		
+		// Remove font awesome and icon fonts
+		$html = preg_replace( '/<link[^>]*?(font-awesome|fontawesome|fa-)[^>]*?>/i', '', $html );
+		
+		// Keep only first 2 stylesheets, remove the rest
 		$css_count = 0;
 		$html = preg_replace_callback(
 			'/<link([^>]*?)rel=["\']stylesheet["\']([^>]*?)>/i',
 			function( $matches ) use ( &$css_count ) {
 				$css_count++;
+				// Keep first 2 CSS files
 				if ( $css_count <= 2 ) return $matches[0];
 				
+				// Check if this is a "heavy" CSS file to remove
 				$url = '';
 				if ( preg_match( '/href=["\']([^"\']+)["\']/', $matches[0], $href ) ) {
 					$url = $href[1];
 				}
 				
-				$remove_keywords = array( 'animation', 'swiper', 'slider', 'icon', 'font-awesome' );
+				// Remove known heavy/unnecessary CSS
+				$remove_keywords = array( 
+					'animation', 
+					'swiper', 
+					'slider', 
+					'icon', 
+					'font-awesome',
+					'social',
+					'carousel',
+					'lightbox'
+				);
+				
 				foreach ( $remove_keywords as $keyword ) {
 					if ( stripos( $url, $keyword ) !== false ) return '';
 				}
 				
-				return $matches[0];
-			},
-			$html
-		);
-		
-		$html = preg_replace_callback(
-			'/<script([^>]*?)src=["\']([^"\']+\.js[^"\']*)["\']([^>]*?)><\/script>/i',
-			function( $matches ) {
-				$js_url = $matches[2];
-				if ( stripos( $js_url, 'jquery.min.js' ) !== false && stripos( $js_url, 'migrate' ) === false ) {
-					return $matches[0];
-				}
+				// Remove all other CSS after first 2
 				return '';
 			},
 			$html
 		);
 		
+		// Remove ALL JavaScript except jQuery core (needed for compatibility)
+		$html = preg_replace_callback(
+			'/<script([^>]*?)src=["\']([^"\']+\.js[^"\']*)["\']([^>]*?)><\/script>/i',
+			function( $matches ) {
+				$js_url = $matches[2];
+				// Keep ONLY jQuery core (not migrate or UI)
+				if ( stripos( $js_url, 'jquery.min.js' ) !== false && 
+				     stripos( $js_url, 'migrate' ) === false && 
+				     stripos( $js_url, 'jquery-ui' ) === false ) {
+					return $matches[0];
+				}
+				// Remove everything else
+				return '';
+			},
+			$html
+		);
+		
+		// Remove inline scripts (except critical ones)
+		$html = preg_replace( '/<script(?![^>]*src=)[^>]*>.*?<\/script>/is', '', $html );
+		
 		return $html;
 	}
 	
-	// NORMAL MODE - Real optimizations
+	// NORMAL MODE - Real optimizations for actual users
 	
 	// Optimize fonts in HTML
 	$html = aero_optimize_fonts( $html );

@@ -231,7 +231,7 @@ body.settings_page_aero .aero-accordion-content {
 }
 
 body.settings_page_aero .aero-accordion-content.active {
-	max-height: 500px;
+	max-height: 600px;
 	border-top: 1px solid #313131;
 }
 
@@ -255,6 +255,49 @@ body.settings_page_aero .aero-setting-description {
 	font-size: 13px;
 	margin-top: 5px;
 	line-height: 1.5;
+}
+
+/* Debug box styles */
+body.settings_page_aero .aero-debug-box {
+	background: #0a0a0a !important;
+	border: 1px solid #313131 !important;
+	border-radius: 0 !important;
+	padding: 15px;
+}
+
+body.settings_page_aero .aero-debug-box textarea {
+	width: 100% !important;
+	height: 300px !important;
+	background: #0a0a0a !important;
+	color: #0f0 !important;
+	border: 1px solid #313131 !important;
+	border-radius: 0 !important;
+	padding: 10px !important;
+	font-family: 'Courier New', Courier, monospace !important;
+	font-size: 12px !important;
+	line-height: 1.5 !important;
+	resize: vertical !important;
+	box-sizing: border-box !important;
+}
+
+body.settings_page_aero .aero-debug-box textarea:focus {
+	outline: none !important;
+	border-color: #2e5aac !important;
+}
+
+body.settings_page_aero .aero-debug-box .button-small {
+	background: #2e5aac !important;
+	color: #fff !important;
+	border: none !important;
+	padding: 5px 12px !important;
+	cursor: pointer !important;
+	font-size: 13px !important;
+	border-radius: 0 !important;
+	transition: background 0.2s ease !important;
+}
+
+body.settings_page_aero .aero-debug-box .button-small:hover {
+	background: #244a8f !important;
 }
 
 /* Footer */
