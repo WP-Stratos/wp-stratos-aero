@@ -3,14 +3,14 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Smartly minify, compress and cache HTML, CSS & JavaScript files to boost website speed. 🚀
-Version: 1.3.3
+Version: 1.3.4
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 // Define plugin version for future releases
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.3.3' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.3.4' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -368,7 +368,7 @@ function aero_check_plugin_update() {
 	$saved_version = get_option('aero_plugin_version' );
 
 	if ( version_compare( $saved_version, AERO_PLUGIN_VERSION_NUM, '<' ) || $saved_version === FALSE ) {
-		if ( $saved_version && in_array( $saved_version, ['1.3.1', '1.3.2', '1.3.3'], true ) ) {
+		if ( $saved_version && in_array( $saved_version, ['1.3.2', '1.3.3', '1.3.4'], true ) ) {
 			update_option( 'aero_review_notice', 'on' );
 		}
 		
@@ -505,6 +505,11 @@ function aero_get_visitor_ip() {
 }
 
 function aero_minify_html( $buffer ) {
+	// Only process HTML pages (don't touch robots.txt, XML sitemaps, JSON, etc.)
+	if ( !aero_is_html_content( $buffer ) ) {
+		return $buffer;
+	}
+	
 	$aero_plugin_version = get_option( 'aero_plugin_version' );
 	$initial = strlen( $buffer );
 	
@@ -552,6 +557,35 @@ function aero_minify_html( $buffer ) {
 	}
 
 	return $buffer;
+}
+
+// Check if the content is HTML (not robots.txt, XML, JSON, etc.)
+function aero_is_html_content( $buffer ) {
+	// Check for HTML DOCTYPE or html tag
+	if ( stripos( $buffer, '<!DOCTYPE html' ) !== false || 
+	     stripos( $buffer, '<html' ) !== false ) {
+		return true;
+	}
+	
+	// Check content-type header if available
+	$headers = headers_list();
+	foreach ( $headers as $header ) {
+		if ( stripos( $header, 'Content-Type:' ) !== false ) {
+			if ( stripos( $header, 'text/html' ) !== false ) {
+				return true;
+			}
+			// If it's explicitly another type, don't process
+			if ( stripos( $header, 'text/xml' ) !== false ||
+			     stripos( $header, 'application/xml' ) !== false ||
+			     stripos( $header, 'application/json' ) !== false ||
+			     stripos( $header, 'text/plain' ) !== false ) {
+				return false;
+			}
+		}
+	}
+	
+	// Default to true if uncertain but has HTML-like content
+	return ( stripos( $buffer, '<head' ) !== false || stripos( $buffer, '<body' ) !== false );
 }
 
 // Ultra HTML compression - removes ALL whitespace to create single-line output
@@ -603,14 +637,16 @@ function aero_process_html_assets( $html ) {
 	
 	// BALANCED GUEST MODE: Keep site recognizable but remove heavy assets
 	if ( $is_guest ) {
-		$css_count = 0;
-		$kept_critical_css = array();
+		// Remove Google Fonts completely (very heavy and render-blocking)
+		$html = preg_replace( '/<link[^>]*?fonts\.googleapis\.com[^>]*?>/i', '', $html );
+		$html = preg_replace( '/<link[^>]*?fonts\.gstatic\.com[^>]*?>/i', '', $html );
 		
-		// Process CSS - Keep first 3 CSS files (theme + critical Elementor), remove the rest
+		$css_count = 0;
+		
+		// Process CSS - Keep only first 2-3 critical files, remove everything else
 		$html = preg_replace_callback(
 			'/<link([^>]*?)rel=["\']stylesheet["\']([^>]*?)>/i',
 			function( $matches ) use ( &$css_count, $css_optimize_enabled ) {
-				$css_count++;
 				$full_match = $matches[0];
 				
 				// Extract href
@@ -619,9 +655,25 @@ function aero_process_html_assets( $html ) {
 				}
 				$css_url = $href_match[1];
 				
-				// Always keep the first 3 CSS files (usually theme + critical styles)
-				if ( $css_count <= 3 ) {
-					// Minify if local and enabled
+				// ALWAYS remove these heavy assets regardless of position
+				$always_remove = array(
+					'animation', 'swiper', 'carousel', 'slider', 'slick',
+					'lightbox', 'fancybox', 'magnific', 'isotope', 'masonry',
+					'aos', 'wow', 'parallax', 'scroll', 'sticky',
+					'font-awesome', 'fontawesome', 'icon', 'glyphicon'
+				);
+				
+				foreach ( $always_remove as $keyword ) {
+					if ( stripos( $css_url, $keyword ) !== false ) {
+						return ''; // REMOVE
+					}
+				}
+				
+				$css_count++;
+				
+				// Keep ONLY the first 2 CSS files (usually theme base + critical)
+				if ( $css_count <= 2 ) {
+					// Minify if local
 					if ( $css_optimize_enabled && aero_is_local_url( $css_url ) && 
 					     strpos( $css_url, '.min.css' ) === false && 
 					     strpos( $css_url, '/cache/aero/css/' ) === false ) {
@@ -633,84 +685,65 @@ function aero_process_html_assets( $html ) {
 					return $full_match;
 				}
 				
-				// Remove animation, font, and non-critical CSS files
-				$remove_keywords = array( 'animation', 'swiper', 'carousel', 'slider', 'lightbox', 'font', 'icon' );
-				foreach ( $remove_keywords as $keyword ) {
-					if ( stripos( $css_url, $keyword ) !== false ) {
-						return ''; // Remove this CSS
-					}
-				}
-				
-				// Keep basic Elementor structure CSS, remove effects
+				// For CSS files after the first 2, be selective
+				// Keep ONLY frontend.min.css from Elementor (core structure)
 				if ( stripos( $css_url, 'elementor' ) !== false ) {
-					if ( stripos( $css_url, 'frontend' ) !== false || stripos( $css_url, 'widget-' ) !== false ) {
-						// Keep basic widget CSS for structure
-						if ( $css_optimize_enabled && aero_is_local_url( $css_url ) ) {
-							$minified_url = aero_minify_file( $css_url, 'css' );
-							if ( $minified_url ) {
-								return str_replace( $css_url, $minified_url, $full_match );
-							}
-						}
+					if ( stripos( $css_url, 'frontend.min.css' ) !== false && $css_count <= 4 ) {
 						return $full_match;
 					}
+					// Remove all other Elementor CSS (widgets, effects, animations)
+					return '';
 				}
 				
-				// Remove everything else
+				// Remove everything else after first 2
 				return '';
 			},
 			$html
 		);
 		
-		// Process JavaScript - Remove MOST scripts, keep critical ones
+		// Process JavaScript - Remove MOST scripts except critical ones
 		$html = preg_replace_callback(
 			'/<script([^>]*?)src=["\']([^"\']+\.js(?:\?[^"\']*)?)["\']([^>]*?)><\/script>/i',
 			function( $matches ) use ( $js_optimize_enabled ) {
 				$full_match = $matches[0];
 				$js_url = $matches[2];
 				
-				// ALWAYS keep jQuery (many things depend on it)
-				if ( stripos( $js_url, 'jquery' ) !== false && stripos( $js_url, 'jquery-migrate' ) === false ) {
+				// ALWAYS keep jQuery core (not migrate)
+				if ( stripos( $js_url, 'jquery.min.js' ) !== false && 
+				     stripos( $js_url, 'jquery-migrate' ) === false ) {
 					return $full_match;
 				}
 				
-				// Remove animations, effects, sliders, and other heavy libraries
-				$remove_keywords = array( 
-					'animation', 'swiper', 'carousel', 'slider', 'lightbox', 'waypoint',
-					'parallax', 'dialog', 'gallery', 'isotope', 'masonry', 'sticky',
-					'scroll', 'aos', 'wow', 'typed', 'particles'
+				// Remove jQuery Migrate (not needed for PageSpeed)
+				if ( stripos( $js_url, 'jquery-migrate' ) !== false ) {
+					return '';
+				}
+				
+				// ALWAYS remove these heavy libraries
+				$always_remove = array(
+					'animation', 'swiper', 'carousel', 'slider', 'slick',
+					'lightbox', 'fancybox', 'magnific', 'gallery',
+					'waypoint', 'parallax', 'aos', 'wow', 'typed',
+					'particles', 'isotope', 'masonry', 'sticky',
+					'scroll-', 'lazyload', 'lazy'
 				);
 				
-				foreach ( $remove_keywords as $keyword ) {
+				foreach ( $always_remove as $keyword ) {
 					if ( stripos( $js_url, $keyword ) !== false ) {
-						return ''; // Remove this script
+						return ''; // REMOVE
 					}
 				}
 				
-				// Remove most Elementor JS (keep only core frontend if present)
+				// Remove ALL Elementor JS (not needed for initial render)
 				if ( stripos( $js_url, 'elementor' ) !== false ) {
-					if ( stripos( $js_url, 'frontend.min.js' ) !== false ) {
-						return $full_match; // Keep core
-					}
-					return ''; // Remove everything else
+					return '';
 				}
 				
-				// Minify remaining local scripts if enabled
-				if ( $js_optimize_enabled && aero_is_local_url( $js_url ) && 
-				     strpos( $js_url, '.min.js' ) === false && 
-				     strpos( $js_url, '/cache/aero/js/' ) === false ) {
-					$minified_url = aero_minify_file( $js_url, 'js' );
-					if ( $minified_url ) {
-						return str_replace( $js_url, $minified_url, $full_match );
-					}
-				}
-				
-				return $full_match;
+				// Remove most other scripts, keep only essentials
+				return '';
 			},
 			$html
 		);
-		
-		// Remove Google Fonts (heavy and block rendering)
-		$html = preg_replace( '/<link[^>]*?fonts\.googleapis\.com[^>]*?>/i', '', $html );
 		
 		return $html;
 	}
