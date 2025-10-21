@@ -48,6 +48,26 @@ function aero_add_stylesheet() {
 	do_action( 'aero_rating_system_action' );
 }
 
+// Register AJAX handlers for diagnostics
+add_action( 'wp_ajax_aero_get_diagnostics', 'aero_ajax_get_diagnostics' );
+function aero_ajax_get_diagnostics() {
+	check_ajax_referer( 'aero_diagnostics_nonce', 'nonce' );
+	
+	if ( !current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+	}
+	
+	$hosting_info = aero_check_hosting_environment();
+	$dropins = aero_check_dropins();
+	$page_builder = aero_detect_page_builder();
+	
+	wp_send_json_success( array(
+		'hosting' => $hosting_info,
+		'dropins' => $dropins,
+		'page_builder' => $page_builder
+	) );
+}
+
 add_action( 'admin_head', 'aero_add_critical_css' );
 function aero_add_critical_css() {
 	$screen = get_current_screen();
@@ -152,43 +172,7 @@ function aero_admin_options() {
 	</h2>
 	<hr style="border-color: #313131;" />
 	
-	<?php
-	// Quick Start Diagnostics
-	$hosting_info = aero_check_hosting_environment();
-	$dropins = aero_check_dropins();
-	$page_builder = aero_detect_page_builder();
-	$is_wpstratos = $hosting_info['is_wpstratos'];
-	
-	$checks = array();
-	$checks[] = array(
-		'label' => 'WP Stratos Hosting',
-		'status' => $is_wpstratos,
-		'type' => 'critical'
-	);
-	$checks[] = array(
-		'label' => 'Object Cache (object-cache.php)',
-		'status' => $dropins['object_cache'],
-		'type' => 'important'
-	);
-	$checks[] = array(
-		'label' => 'Page Cache (advanced-cache.php)',
-		'status' => $dropins['advanced_cache'],
-		'type' => 'important'
-	);
-	$checks[] = array(
-		'label' => 'Page Builder Detected',
-		'status' => $page_builder ? true : false,
-		'type' => 'info',
-		'extra' => $page_builder ? $page_builder : 'None'
-	);
-	
-	$passed = 0;
-	foreach ($checks as $check) {
-		if ($check['status']) $passed++;
-	}
-	?>
-	
-	<div class="aero-diagnostics-container <?php echo !$is_wpstratos ? 'aero-not-wpstratos' : ''; ?>">
+	<div class="aero-diagnostics-container" id="aero-diagnostics">
 		<div class="aero-diagnostics-header">
 			<div class="aero-diagnostics-title">
 				<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 8px;">
@@ -196,40 +180,37 @@ function aero_admin_options() {
 				</svg>
 				Quick Start Diagnostics
 			</div>
-			<div class="aero-diagnostics-score"><?php echo $passed; ?>/<?php echo count($checks); ?> Passed</div>
+			<div class="aero-diagnostics-score" id="aero-diagnostics-score">
+				<span class="aero-loading-dots">Loading<span>.</span><span>.</span><span>.</span></span>
+			</div>
 		</div>
 		
-		<div class="aero-diagnostics-list">
-			<?php foreach ($checks as $check): ?>
-				<div class="aero-diagnostic-item <?php echo $check['status'] ? 'aero-diagnostic-pass' : 'aero-diagnostic-fail'; ?> aero-diagnostic-<?php echo $check['type']; ?>">
-					<div class="aero-diagnostic-icon">
-						<?php if ($check['status']): ?>
-							<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm-1.5 15l-4-4 1.41-1.41L8.5 12.17l5.09-5.09L15 8.5l-6.5 6.5z" fill="currentColor"/>
-							</svg>
-						<?php else: ?>
-							<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm1 15H9v-2h2v2zm0-4H9V5h2v6z" fill="currentColor"/>
-							</svg>
-						<?php endif; ?>
-					</div>
-					<div class="aero-diagnostic-label">
-						<?php echo esc_html($check['label']); ?>
-						<?php if (isset($check['extra'])): ?>
-							<span class="aero-diagnostic-extra"><?php echo esc_html($check['extra']); ?></span>
-						<?php endif; ?>
-					</div>
-				</div>
-			<?php endforeach; ?>
+		<div class="aero-diagnostics-list" id="aero-diagnostics-list">
+			<div class="aero-diagnostic-item aero-diagnostic-loading">
+				<div class="aero-diagnostic-spinner"></div>
+				<div class="aero-diagnostic-label">Checking WP Stratos Hosting...</div>
+			</div>
+			<div class="aero-diagnostic-item aero-diagnostic-loading">
+				<div class="aero-diagnostic-spinner"></div>
+				<div class="aero-diagnostic-label">Checking Object Cache...</div>
+			</div>
+			<div class="aero-diagnostic-item aero-diagnostic-loading">
+				<div class="aero-diagnostic-spinner"></div>
+				<div class="aero-diagnostic-label">Checking Page Cache...</div>
+			</div>
+			<div class="aero-diagnostic-item aero-diagnostic-loading">
+				<div class="aero-diagnostic-spinner"></div>
+				<div class="aero-diagnostic-label">Detecting Page Builder...</div>
+			</div>
 		</div>
 		
-		<?php if (!$is_wpstratos): ?>
+		<div id="aero-upgrade-notice" style="display:none;">
 			<div class="aero-upgrade-notice">
 				<div class="aero-upgrade-content">
 					<div class="aero-upgrade-text">
 						<strong>Not on WP Stratos hosting?</strong> You're missing out on significant performance improvements. WP Stratos provides optimized infrastructure with built-in caching, CDN, and performance features that work seamlessly with Aero.
 					</div>
-					<a href="https://wpstratos.com" target="_blank" class="aero-upgrade-button">
+					<a href="https://wpstratos.com" target="_blank" class="aero-upgrade-button" style="color:#ffffff !important;">
 						Learn About WP Stratos
 						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-left: 6px;">
 							<path d="M12 8.667V12.667C12 13.403 11.403 14 10.667 14H3.333C2.597 14 2 13.403 2 12.667V5.333C2 4.597 2.597 4 3.333 4H7.333M10 2H14M14 2V6M14 2L6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -237,8 +218,91 @@ function aero_admin_options() {
 					</a>
 				</div>
 			</div>
-		<?php endif; ?>
+		</div>
 	</div>
+	
+	<script>
+	jQuery(document).ready(function($) {
+		// Fetch diagnostics via AJAX
+		$.ajax({
+			url: ajaxurl,
+			type: 'POST',
+			data: {
+				action: 'aero_get_diagnostics',
+				nonce: '<?php echo wp_create_nonce('aero_diagnostics_nonce'); ?>'
+			},
+			success: function(response) {
+				if (response.success) {
+					aeroUpdateDiagnostics(response.data);
+				}
+			},
+			error: function() {
+				// Show error state
+				$('#aero-diagnostics-list').html('<div class="aero-diagnostic-item aero-diagnostic-fail"><div class="aero-diagnostic-label">Failed to load diagnostics. Please refresh the page.</div></div>');
+			}
+		});
+		
+		function aeroUpdateDiagnostics(data) {
+			var hosting = data.hosting;
+			var dropins = data.dropins;
+			var pageBuilder = data.page_builder;
+			
+			var checks = [
+				{
+					label: 'WP Stratos Hosting',
+					status: hosting.is_wpstratos,
+					type: 'critical'
+				},
+				{
+					label: 'Object Cache (object-cache.php)',
+					status: dropins.object_cache,
+					type: 'important'
+				},
+				{
+					label: 'Page Cache (advanced-cache.php)',
+					status: dropins.advanced_cache,
+					type: 'important'
+				},
+				{
+					label: 'Page Builder Detected',
+					status: pageBuilder ? true : false,
+					type: 'info',
+					extra: pageBuilder ? pageBuilder : 'None'
+				}
+			];
+			
+			var passed = 0;
+			var html = '';
+			
+			checks.forEach(function(check) {
+				if (check.status) passed++;
+				
+				var statusClass = check.status ? 'aero-diagnostic-pass' : 'aero-diagnostic-fail';
+				var typeClass = 'aero-diagnostic-' + check.type;
+				var icon = check.status ? 
+					'<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm-1.5 15l-4-4 1.41-1.41L8.5 12.17l5.09-5.09L15 8.5l-6.5 6.5z" fill="currentColor"/></svg>' :
+					'<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm1 15H9v-2h2v2zm0-4H9V5h2v6z" fill="currentColor"/></svg>';
+				
+				html += '<div class="aero-diagnostic-item ' + statusClass + ' ' + typeClass + '">';
+				html += '<div class="aero-diagnostic-icon">' + icon + '</div>';
+				html += '<div class="aero-diagnostic-label">' + check.label;
+				if (check.extra) {
+					html += '<span class="aero-diagnostic-extra">' + check.extra + '</span>';
+				}
+				html += '</div></div>';
+			});
+			
+			$('#aero-diagnostics-list').html(html);
+			$('#aero-diagnostics-score').html(passed + '/' + checks.length + ' Passed');
+			
+			// Update container class
+			if (!hosting.is_wpstratos) {
+				$('#aero-diagnostics').addClass('aero-not-wpstratos');
+				$('#aero-upgrade-notice').show();
+			}
+		}
+	});
+	</script>
 	
 	<form method="post" name="options_form">
 	<?php wp_nonce_field( 'aero_settings_nonce' ); ?>
