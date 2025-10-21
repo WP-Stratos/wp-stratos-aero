@@ -229,7 +229,7 @@ function aero_admin_options() {
 					<div class="aero-upgrade-text">
 						<strong>Not on WP Stratos hosting?</strong> You're missing out on significant performance improvements. WP Stratos provides optimized infrastructure with built-in caching, CDN, and performance features that work seamlessly with Aero.
 					</div>
-					<a href="https://wpstratos.com" target="_blank" class="aero-upgrade-button">
+					<a style="color:#ffffff !important;" href="https://wpstratos.com" target="_blank" class="aero-upgrade-button">
 						Learn About WP Stratos
 						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-left: 6px;">
 							<path d="M12 8.667V12.667C12 13.403 11.403 14 10.667 14H3.333C2.597 14 2 13.403 2 12.667V5.333C2 4.597 2.597 4 3.333 4H7.333M10 2H14M14 2V6M14 2L6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
