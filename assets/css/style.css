@@ -122,6 +122,9 @@ body.settings_page_aero .aero-container p {
 }
 
 body.settings_page_aero .aero-container input[type="checkbox"] {
+	background: #000 !important;
+	border: 1px solid #313131 !important;
+	border-radius: 0 !important;
 	margin-right: 8px;
 	cursor: pointer;
 }
@@ -487,9 +490,13 @@ body.settings_page_aero .aero-loading-dots span:nth-child(3) {
 }
 
 @keyframes aero-dot-blink {
-	0%, 60%, 100% {
+
+	0%,
+	60%,
+	100% {
 		opacity: 0;
 	}
+
 	30% {
 		opacity: 1;
 	}
