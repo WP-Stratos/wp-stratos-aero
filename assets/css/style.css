@@ -90,6 +90,14 @@ body.settings_page_aero .aero-stat-value {
 	color: #2e5aac !important;
 	font-weight: 600;
 	font-size: 16px;
+	min-width: 60px;
+	text-align: right;
+}
+
+body.settings_page_aero .aero-stat-value .aero-loading-dots {
+	color: #999 !important;
+	font-size: 14px;
+	font-weight: 400;
 }
 
 body.settings_page_aero .aero-container h2 {

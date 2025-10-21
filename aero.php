@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.3
+Version: 1.5.4
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.3' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.4' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -61,10 +61,23 @@ function aero_ajax_get_diagnostics() {
 	$dropins = aero_check_dropins();
 	$page_builder = aero_detect_page_builder();
 	
+	// Get cache statistics
+	$css_cache_size = aero_get_directory_size(AERO_CSS_CACHE_DIR);
+	$js_cache_size = aero_get_directory_size(AERO_JS_CACHE_DIR);
+	$total_cache_size = $css_cache_size + $js_cache_size;
+	
+	$css_file_count = aero_count_files(AERO_CSS_CACHE_DIR);
+	$js_file_count = aero_count_files(AERO_JS_CACHE_DIR);
+	
 	wp_send_json_success( array(
 		'hosting' => $hosting_info,
 		'dropins' => $dropins,
-		'page_builder' => $page_builder
+		'page_builder' => $page_builder,
+		'cache_stats' => array(
+			'css_files' => $css_file_count,
+			'js_files' => $js_file_count,
+			'total_size' => aero_format_bytes($total_cache_size)
+		)
 	) );
 }
 
@@ -234,13 +247,22 @@ function aero_admin_options() {
 			success: function(response) {
 				if (response.success) {
 					aeroUpdateDiagnostics(response.data);
+					aeroUpdateCacheStats(response.data.cache_stats);
 				}
 			},
 			error: function() {
-				// Show error state
+				// Show error state for diagnostics
 				$('#aero-diagnostics-list').html('<div class="aero-diagnostic-item aero-diagnostic-fail"><div class="aero-diagnostic-label">Failed to load diagnostics. Please refresh the page.</div></div>');
+				// Show error state for cache stats
+				$('#aero-css-count, #aero-js-count, #aero-total-size').html('<span style="color: #dc2626;">Error</span>');
 			}
 		});
+		
+		function aeroUpdateCacheStats(stats) {
+			$('#aero-css-count').html(stats.css_files + ' files');
+			$('#aero-js-count').html(stats.js_files + ' files');
+			$('#aero-total-size').html(stats.total_size);
+		}
 		
 		function aeroUpdateDiagnostics(data) {
 			var hosting = data.hosting;
@@ -428,25 +450,23 @@ function aero_admin_options() {
 
 	<div class="aero-sidebar">
 		<h3>Cache Statistics</h3>
-		<?php
-		$css_cache_size = aero_get_directory_size(AERO_CSS_CACHE_DIR);
-		$js_cache_size = aero_get_directory_size(AERO_JS_CACHE_DIR);
-		$total_cache_size = $css_cache_size + $js_cache_size;
-		
-		$css_file_count = aero_count_files(AERO_CSS_CACHE_DIR);
-		$js_file_count = aero_count_files(AERO_JS_CACHE_DIR);
-		?>
 		<div class="aero-stat-item">
 			<span class="aero-stat-label">CSS Cached</span>
-			<span class="aero-stat-value"><?php echo $css_file_count; ?> files</span>
+			<span class="aero-stat-value" id="aero-css-count">
+				<span class="aero-loading-dots"><span>.</span><span>.</span><span>.</span></span>
+			</span>
 		</div>
 		<div class="aero-stat-item">
 			<span class="aero-stat-label">JS Cached</span>
-			<span class="aero-stat-value"><?php echo $js_file_count; ?> files</span>
+			<span class="aero-stat-value" id="aero-js-count">
+				<span class="aero-loading-dots"><span>.</span><span>.</span><span>.</span></span>
+			</span>
 		</div>
 		<div class="aero-stat-item">
 			<span class="aero-stat-label">Total Saved</span>
-			<span class="aero-stat-value"><?php echo aero_format_bytes($total_cache_size); ?></span>
+			<span class="aero-stat-value" id="aero-total-size">
+				<span class="aero-loading-dots"><span>.</span><span>.</span><span>.</span></span>
+			</span>
 		</div>
 		
 		<h3 style="margin-top: 30px;">Performance Tips</h3>
