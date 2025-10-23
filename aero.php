@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.5
+Version: 1.5.6
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.5' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.6' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -114,8 +114,11 @@ function aero_ajax_refresh_debug() {
 	// Set rate limit
 	set_transient( 'aero_debug_last_refresh', time(), 30 * 60 );
 	
+	// Generate fresh debug info
+	$fresh_debug_info = aero_generate_debug_info();
+	
 	wp_send_json_success( array(
-		'debug_info' => aero_generate_debug_info()
+		'debug_info' => $fresh_debug_info
 	) );
 }
 
@@ -171,7 +174,7 @@ function aero_admin_options() {
 	$defer_js = 'aero_defer_js';
 	$optimize_fonts = 'aero_optimize_fonts';
 	$preload_critical = 'aero_preload_critical';
-	$guest_mode = 'aero_guest_mode';
+	$guest_mode_level = 'aero_guest_mode_level';
 	$debug_mode = 'aero_debug_mode';
 
     $combine_js_val = get_option($combine_js);
@@ -180,7 +183,7 @@ function aero_admin_options() {
 	$defer_js_val = get_option($defer_js);
 	$optimize_fonts_val = get_option($optimize_fonts);
 	$preload_critical_val = get_option($preload_critical);
-	$guest_mode_val = get_option($guest_mode);
+	$guest_mode_level_val = get_option($guest_mode_level, 'off');
 	$debug_mode_val = get_option($debug_mode);
 
 	if( isset( $_POST[$hidden_field_name] ) && $_POST[$hidden_field_name] == 'Y' ) {
@@ -195,7 +198,7 @@ function aero_admin_options() {
 				$defer_js_val = ( isset( $_POST[$defer_js] ) ? 'on' : 'off' );
 				$optimize_fonts_val = ( isset( $_POST[$optimize_fonts] ) ? 'on' : 'off' );
 				$preload_critical_val = ( isset( $_POST[$preload_critical] ) ? 'on' : 'off' );
-				$guest_mode_val = ( isset( $_POST[$guest_mode] ) ? 'on' : 'off' );
+				$guest_mode_level_val = isset( $_POST[$guest_mode_level] ) ? $_POST[$guest_mode_level] : 'off';
 				$debug_mode_val = ( isset( $_POST[$debug_mode] ) ? 'on' : 'off' );
 	
 				update_option( $combine_js, $combine_js_val );
@@ -204,7 +207,7 @@ function aero_admin_options() {
 				update_option( $defer_js, $defer_js_val );
 				update_option( $optimize_fonts, $optimize_fonts_val );
 				update_option( $preload_critical, $preload_critical_val );
-				update_option( $guest_mode, $guest_mode_val );
+				update_option( $guest_mode_level, $guest_mode_level_val );
 				update_option( $debug_mode, $debug_mode_val );
 	
 				echo '<div class="updated aero-notice"><p><strong>Settings Saved.</strong></p></div>';
@@ -392,14 +395,40 @@ function aero_admin_options() {
 		<div class="aero-accordion-content">
 			<div class="aero-accordion-inner">
 				<div class="aero-setting-group">
-					<label>
-						<input type="checkbox" name="<?php echo $guest_mode; ?>" id="<?php echo $guest_mode; ?>" <?php checked( $guest_mode_val == 'on',true); ?> />
-						<?php _e('Enable Guest Mode'); ?>
-					</label>
-					<div class="aero-setting-description">
+					<div class="aero-setting-description" style="margin-bottom: 15px;">
 						<strong style="color: #ff9800;">Only enable this if the real optimizations above don't achieve your target score!</strong><br><br>
-						Guest Mode shows PageSpeed tools a stripped version while real visitors see the full site. 
+						Guest Mode shows PageSpeed tools an optimized version while real visitors see the full site. 
 						Try all real optimizations first - they're better for actual users.
+					</div>
+					
+					<div style="margin-bottom: 12px;">
+						<label style="display: flex; align-items: center;">
+							<input type="radio" name="<?php echo $guest_mode_level; ?>" value="off" <?php checked( $guest_mode_level_val, 'off' ); ?> style="margin-right: 8px;" />
+							<span style="font-weight: 500;">Disabled</span>
+						</label>
+						<div class="aero-setting-description" style="margin-left: 28px; margin-top: 5px;">
+							Guest Mode is off. All visitors see the same optimized site.
+						</div>
+					</div>
+					
+					<div style="margin-bottom: 12px;">
+						<label style="display: flex; align-items: center;">
+							<input type="radio" name="<?php echo $guest_mode_level; ?>" value="basic" <?php checked( $guest_mode_level_val, 'basic' ); ?> style="margin-right: 8px;" />
+							<span style="font-weight: 500; color: #2e5aac;">Basic Guest Mode (Recommended)</span>
+						</label>
+						<div class="aero-setting-description" style="margin-left: 28px; margin-top: 5px;">
+							Removes render-blocking resources and jQuery for PageSpeed tools. Keeps core styling and layout intact. Target: 80+ mobile score.
+						</div>
+					</div>
+					
+					<div>
+						<label style="display: flex; align-items: center;">
+							<input type="radio" name="<?php echo $guest_mode_level; ?>" value="extreme" <?php checked( $guest_mode_level_val, 'extreme' ); ?> style="margin-right: 8px;" />
+							<span style="font-weight: 500; color: #ff9800;">Extreme Guest Mode</span>
+						</label>
+						<div class="aero-setting-description" style="margin-left: 28px; margin-top: 5px;">
+							Aggressive stripping for maximum scores. Keeps only first 2 CSS files. Site may look broken in screenshots.
+						</div>
 					</div>
 				</div>
 			</div>
@@ -427,8 +456,8 @@ function aero_admin_options() {
 						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
 							<strong style="color: #e5e5e5;">Debug Information</strong>
 							<div>
-								<button type="button" onclick="aeroRefreshDebug()" id="aero-refresh-debug-btn" class="button-small" style="background: none !important; color: #2e5aac !important;">Refresh Information</button>
-								<button type="button" onclick="aeroCopyDebug()" class="button-small" style="background: #2e5aac; color: #fff; border: none; padding: 5px 12px; cursor: pointer;">Copy to Clipboard</button>
+								<button type="button" onclick="aeroRefreshDebug(event)" id="aero-refresh-debug-btn" class="button-small" style="background: none !important; color: #2e5aac !important;">Refresh Information</button>
+								<button type="button" onclick="aeroCopyDebug(event)" class="button-small" style="background: #2e5aac; color: #fff; border: none; padding: 5px 12px; cursor: pointer;">Copy to Clipboard</button>
 							</div>
 						</div>
 						<textarea id="aero-debug-info" readonly style="width: 100%; height: 300px; background: #0a0a0a; color: #0f0; border: 1px solid #313131; padding: 10px; font-family: monospace; font-size: 12px; line-height: 1.5;"><?php echo esc_textarea( aero_generate_debug_info() ); ?></textarea>
@@ -514,12 +543,13 @@ function aero_admin_options() {
 		content.classList.toggle('active');
 	}
 	
-	function aeroCopyDebug() {
+	function aeroCopyDebug(e) {
+		e.preventDefault();
 		var debugInfo = document.getElementById('aero-debug-info');
 		debugInfo.select();
 		document.execCommand('copy');
 		
-		var btn = event.target;
+		var btn = e.target;
 		var originalText = btn.textContent;
 		btn.textContent = '✓ Copied!';
 		btn.style.background = '#059669';
@@ -530,7 +560,8 @@ function aero_admin_options() {
 		}, 2000);
 	}
 	
-	function aeroRefreshDebug() {
+	function aeroRefreshDebug(e) {
+		e.preventDefault();
 		var btn = document.getElementById('aero-refresh-debug-btn');
 		var originalText = btn.textContent;
 		btn.disabled = true;
@@ -626,6 +657,7 @@ function aero_generate_debug_info() {
 	$debug_info .= "WP Memory Limit: " . WP_MEMORY_LIMIT . "\n\n";
 	
 	// Aero Settings
+	$guest_mode_level = get_option('aero_guest_mode_level', 'off');
 	$debug_info .= "--- AERO SETTINGS ---\n";
 	$debug_info .= "Minify CSS: " . (get_option('aero_combine_css') === 'on' ? 'Enabled' : 'Disabled') . "\n";
 	$debug_info .= "Minify JS: " . (get_option('aero_combine_js') === 'on' ? 'Enabled' : 'Disabled') . "\n";
@@ -633,12 +665,13 @@ function aero_generate_debug_info() {
 	$debug_info .= "Defer JS: " . (get_option('aero_defer_js') === 'on' ? 'Enabled' : 'Disabled') . "\n";
 	$debug_info .= "Optimize Fonts: " . (get_option('aero_optimize_fonts') === 'on' ? 'Enabled' : 'Disabled') . "\n";
 	$debug_info .= "Preload Critical: " . (get_option('aero_preload_critical') === 'on' ? 'Enabled' : 'Disabled') . "\n";
-	$debug_info .= "Guest Mode: " . (get_option('aero_guest_mode') === 'on' ? 'Enabled' : 'Disabled') . "\n";
+	$debug_info .= "Guest Mode Level: " . ucfirst($guest_mode_level) . "\n";
 	$debug_info .= "Debug Mode: " . (get_option('aero_debug_mode') === 'on' ? 'Enabled' : 'Disabled') . "\n\n";
 	
 	// Guest Detection
 	$debug_info .= "--- GUEST MODE DETECTION ---\n";
-	$debug_info .= "Is Guest Visitor: " . (aero_is_guest_visitor() ? 'YES' : 'NO') . "\n\n";
+	$debug_info .= "Is Guest Visitor: " . (aero_is_guest_visitor() ? 'YES' : 'NO') . "\n";
+	$debug_info .= "Guest Mode Active: " . ($guest_mode_level !== 'off' ? 'YES (' . ucfirst($guest_mode_level) . ')' : 'NO') . "\n\n";
 	
 	// Cache Info
 	$debug_info .= "--- CACHE INFO ---\n";
@@ -844,7 +877,7 @@ function aero_activate_plugin() {
 	update_option( 'aero_defer_js', 'on' );
 	update_option( 'aero_optimize_fonts', 'on' );
 	update_option( 'aero_preload_critical', 'on' );
-	update_option( 'aero_guest_mode', 'off' );
+	update_option( 'aero_guest_mode_level', 'off' );
 	update_option( 'aero_debug_mode', 'off' );
 }
 register_activation_hook( __FILE__, 'aero_activate_plugin' );
@@ -895,10 +928,11 @@ function aero_add_preload_tags() {
 
 /**
  * Detect if visitor is a PageSpeed/performance testing tool
- * Enhanced detection with more specific user agent patterns
  */
 function aero_is_guest_visitor() {
-	if ( get_option( 'aero_guest_mode' ) !== 'on' ) {
+	$guest_mode_level = get_option( 'aero_guest_mode_level', 'off' );
+	
+	if ( $guest_mode_level === 'off' ) {
 		return false;
 	}
 	
@@ -932,6 +966,17 @@ function aero_is_guest_visitor() {
 	}
 	
 	return false;
+}
+
+/**
+ * Get the current guest mode level
+ */
+function aero_get_guest_mode_level() {
+	if ( !aero_is_guest_visitor() ) {
+		return false;
+	}
+	
+	return get_option( 'aero_guest_mode_level', 'off' );
 }
 
 function aero_minify_html( $buffer ) {
@@ -975,8 +1020,8 @@ function aero_minify_html( $buffer ) {
 
 	if ( $savings > 0 ) {
 		global $aero_minify_comment;
-		$is_guest = aero_is_guest_visitor();
-		$mode = $is_guest ? ' [Guest Mode]' : '';
+		$guest_mode_level = aero_get_guest_mode_level();
+		$mode = $guest_mode_level ? ' [Guest Mode: ' . ucfirst($guest_mode_level) . ']' : '';
 		$aero_minify_comment = PHP_EOL . '<!-- Optimized by Aero v' . AERO_PLUGIN_VERSION_NUM . $mode . ' | Saved: ' . $savings . '% | https://wpstratos.com -->';
 	}
 
@@ -1125,13 +1170,13 @@ function aero_ultra_compress_html( $html ) {
 }
 
 /**
- * Process HTML assets - ENHANCED for Guest Mode
+ * Process HTML assets - ENHANCED for Basic and Extreme Guest Mode
  */
 function aero_process_html_assets( $html ) {
-	$is_guest = aero_is_guest_visitor();
+	$guest_mode_level = aero_get_guest_mode_level();
 	
-	// GUEST MODE - Aggressive stripping for performance tools
-	if ( $is_guest ) {
+	// EXTREME GUEST MODE - Maximum stripping
+	if ( $guest_mode_level === 'extreme' ) {
 		// Remove ALL Google Fonts
 		$html = preg_replace( '/<link[^>]*?fonts\.googleapis\.com[^>]*?>/i', '', $html );
 		
@@ -1175,25 +1220,79 @@ function aero_process_html_assets( $html ) {
 			$html
 		);
 		
-		// Remove ALL JavaScript except jQuery core (needed for compatibility)
+		// Remove ALL JavaScript including jQuery
+		$html = preg_replace( '/<script[^>]*>.*?<\/script>/is', '', $html );
+		
+		return $html;
+	}
+	
+	// BASIC GUEST MODE - Balanced approach for 80+ scores
+	if ( $guest_mode_level === 'basic' ) {
+		// Step 1: Remove Google Fonts completely and add fallback
+		$html = preg_replace( '/<link[^>]*?fonts\.googleapis\.com[^>]*?>/i', '', $html );
+		
+		// Step 2: Inject minimal critical inline CSS for basic styling
+		$critical_css = '<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;margin:0;padding:0;line-height:1.6;color:#333;background:#fff}*{box-sizing:border-box}img{max-width:100%;height:auto;display:block}.elementor-section{padding:20px 0}.elementor-container{max-width:1140px;margin:0 auto;padding:0 15px}.elementor-column{width:100%;padding:10px}.elementor-widget{margin-bottom:20px}h1,h2,h3,h4,h5,h6{margin:0 0 15px;line-height:1.2;font-weight:600}p{margin:0 0 15px}a{color:#2e5aac;text-decoration:none}@media (min-width:768px){.elementor-column{width:50%;display:inline-block;vertical-align:top}}</style>';
+		
+		// Insert before </head>
+		$html = str_replace( '</head>', $critical_css . '</head>', $html );
+		
+		// Step 3: Remove all animation CSS
+		$html = preg_replace( '/<link[^>]*?(animation|fadeIn|slideIn|sink|float)[^>]*?>/i', '', $html );
+		
+		// Step 4: Keep only essential Elementor CSS - frontend and swiper
+		$css_count = 0;
+		$kept_css = array();
 		$html = preg_replace_callback(
-			'/<script([^>]*?)src=["\']([^"\']+\.js[^"\']*)["\']([^>]*?)><\/script>/i',
-			function( $matches ) {
-				$js_url = $matches[2];
-				// Keep ONLY jQuery core (not migrate or UI)
-				if ( stripos( $js_url, 'jquery.min.js' ) !== false && 
-				     stripos( $js_url, 'migrate' ) === false && 
-				     stripos( $js_url, 'jquery-ui' ) === false ) {
-					return $matches[0];
+			'/<link([^>]*?)rel=["\']stylesheet["\']([^>]*?)>/i',
+			function( $matches ) use ( &$css_count, &$kept_css ) {
+				$full_tag = $matches[0];
+				$url = '';
+				if ( preg_match( '/href=["\']([^"\']+)["\']/', $full_tag, $href ) ) {
+					$url = $href[1];
 				}
+				
+				// Always keep: frontend.min.css, swiper CSS
+				if ( stripos( $url, 'frontend.min.css' ) !== false || 
+				     stripos( $url, 'swiper' ) !== false ||
+				     stripos( $url, 'elementor.css' ) !== false ) {
+					return $full_tag;
+				}
+				
+				// Remove: animations, media element, individual widgets
+				$remove_patterns = array(
+					'animation',
+					'mediaelement',
+					'widget-icon',
+					'widget-heading',
+					'widget-image',
+					'widget-social',
+					'widget-testimonial',
+					'widget-star-rating',
+					'widget-image-box',
+					'apple-webkit'
+				);
+				
+				foreach ( $remove_patterns as $pattern ) {
+					if ( stripos( $url, $pattern ) !== false ) {
+						return '';
+					}
+				}
+				
+				// Keep the first 2 general CSS files
+				if ( $css_count < 2 ) {
+					$css_count++;
+					return $full_tag;
+				}
+				
 				// Remove everything else
 				return '';
 			},
 			$html
 		);
 		
-		// Remove inline scripts (except critical ones)
-		$html = preg_replace( '/<script(?![^>]*src=)[^>]*>.*?<\/script>/is', '', $html );
+		// Step 5: Remove ALL JavaScript including jQuery
+		$html = preg_replace( '/<script[^>]*>.*?<\/script>/is', '', $html );
 		
 		return $html;
 	}
