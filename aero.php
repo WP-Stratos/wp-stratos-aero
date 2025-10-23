@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.9
+Version: 1.5.11
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.9' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.11' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -396,39 +396,41 @@ function aero_admin_options() {
 			<div class="aero-accordion-inner">
 				<div class="aero-setting-group">
 					<div class="aero-setting-description" style="margin-bottom: 15px;">
-						<strong style="color: #ff9800;">Only enable this if the real optimizations above don't achieve your target score!</strong><br><br>
-						Guest Mode shows PageSpeed tools an optimized version while real visitors see the full site. 
+						<strong style="color: #ff9800;">Only enable this if the optimizations above don't achieve your target score!</strong><br><br>
+						Guest Mode shows PageSpeed tools a super optimized version while real visitors see the full site. 
 						Try all real optimizations first - they're better for actual users.
 					</div>
 					
-					<div style="margin-bottom: 12px;">
-						<label style="display: flex; align-items: center;">
-							<input type="radio" name="<?php echo $guest_mode_level; ?>" value="off" <?php checked( $guest_mode_level_val, 'off' ); ?> style="margin-right: 8px;" />
-							<span style="font-weight: 500;">Disabled</span>
+					<div class="aero-radio-cards">
+						<label class="aero-radio-card <?php echo $guest_mode_level_val === 'off' ? 'selected' : ''; ?>">
+							<div class="aero-radio-card-header">
+								<span class="aero-radio-card-title">Disabled</span>
+								<input type="radio" name="<?php echo $guest_mode_level; ?>" value="off" <?php checked( $guest_mode_level_val, 'off' ); ?> />
+							</div>
+							<p class="aero-radio-card-description">
+								Guest Mode is off. All visitors see the same optimized site.
+							</p>
 						</label>
-						<div class="aero-setting-description" style="margin-left: 28px; margin-top: 5px;">
-							Guest Mode is off. All visitors see the same optimized site.
-						</div>
-					</div>
-					
-					<div style="margin-bottom: 12px;">
-						<label style="display: flex; align-items: center;">
-							<input type="radio" name="<?php echo $guest_mode_level; ?>" value="basic" <?php checked( $guest_mode_level_val, 'basic' ); ?> style="margin-right: 8px;" />
-							<span style="font-weight: 500; color: #2e5aac;">Basic Guest Mode (Recommended)</span>
+						
+						<label class="aero-radio-card <?php echo $guest_mode_level_val === 'basic' ? 'selected' : ''; ?>">
+							<div class="aero-radio-card-header">
+								<span class="aero-radio-card-title">Basic (Recommended)</span>
+								<input type="radio" name="<?php echo $guest_mode_level; ?>" value="basic" <?php checked( $guest_mode_level_val, 'basic' ); ?> />
+							</div>
+							<p class="aero-radio-card-description">
+								Combines ALL CSS files into one minified file, inlines all fonts (Google Fonts, Adobe Fonts, etc.), and removes all JavaScript for PageSpeed tools. Eliminates render-blocking requests. Target: 90+ mobile score.
+							</p>
 						</label>
-						<div class="aero-setting-description" style="margin-left: 28px; margin-top: 5px;">
-							Combines ALL CSS files into one minified file, inlines all fonts (Google Fonts, Adobe Fonts, etc.), and removes all JavaScript for PageSpeed tools. Eliminates render-blocking requests. Target: 90+ mobile score.
-						</div>
-					</div>
-					
-					<div>
-						<label style="display: flex; align-items: center;">
-							<input type="radio" name="<?php echo $guest_mode_level; ?>" value="extreme" <?php checked( $guest_mode_level_val, 'extreme' ); ?> style="margin-right: 8px;" />
-							<span style="font-weight: 500; color: #ff9800;">Extreme Guest Mode</span>
+						
+						<label class="aero-radio-card warning <?php echo $guest_mode_level_val === 'extreme' ? 'selected' : ''; ?>">
+							<div class="aero-radio-card-header">
+								<span class="aero-radio-card-title">Extreme ⚠️</span>
+								<input type="radio" name="<?php echo $guest_mode_level; ?>" value="extreme" <?php checked( $guest_mode_level_val, 'extreme' ); ?> />
+							</div>
+							<p class="aero-radio-card-description">
+								Aggressive stripping for maximum scores. Keeps only first 2 CSS files. Site may look broken in metric screenshots. <strong>Not recommended.</strong>
+							</p>
 						</label>
-						<div class="aero-setting-description" style="margin-left: 28px; margin-top: 5px;">
-							Aggressive stripping for maximum scores. Keeps only first 2 CSS files. Site may look broken in screenshots.
-						</div>
 					</div>
 				</div>
 			</div>
