@@ -129,6 +129,12 @@ body.settings_page_aero .aero-container input[type="checkbox"] {
 	cursor: pointer;
 }
 
+body.settings_page_aero .aero-container input[type="radio"] {
+	background: #000 !important;
+	border: 1px solid #313131 !important;
+	cursor: pointer;
+}
+
 body.settings_page_aero .aero-button {
 	background: #2e5aac !important;
 	border: none !important;
