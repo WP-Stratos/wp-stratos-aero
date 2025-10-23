@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.7
+Version: 1.5.8
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.7' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.8' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -417,7 +417,7 @@ function aero_admin_options() {
 							<span style="font-weight: 500; color: #2e5aac;">Basic Guest Mode (Recommended)</span>
 						</label>
 						<div class="aero-setting-description" style="margin-left: 28px; margin-top: 5px;">
-							Combines ALL CSS files into one minified file and removes all JavaScript for PageSpeed tools. Target: 90+ mobile score.
+							Combines ALL CSS files into one minified file, inlines all fonts (Google Fonts, Adobe Fonts, etc.), and removes all JavaScript for PageSpeed tools. Eliminates render-blocking requests. Target: 90+ mobile score.
 						</div>
 					</div>
 					
@@ -1226,9 +1226,59 @@ function aero_process_html_assets( $html ) {
 		return $html;
 	}
 	
-	// BASIC GUEST MODE - Combine all CSS into one file, remove all JS
+	// BASIC GUEST MODE - Combine all CSS into one file, remove all JS, inline fonts
 	if ( $guest_mode_level === 'basic' ) {
-		// Step 1: Extract all CSS URLs from the page
+		// Step 1: Extract and inline all font CSS (Google Fonts, Adobe Fonts, etc.)
+		$font_providers = array(
+			'fonts.googleapis.com',
+			'fonts.gstatic.com',
+			'use.typekit.net',
+			'cloud.typography.com',
+			'use.fontawesome.com',
+			'fonts.adobe.com'
+		);
+		
+		$inlined_fonts_css = '';
+		$font_links_removed = 0;
+		
+		// Find and fetch all font provider CSS
+		preg_match_all( '/<link([^>]*?)href=["\']([^"\']+)["\']([^>]*?)>/i', $html, $all_links );
+		
+		if ( !empty( $all_links[2] ) ) {
+			foreach ( $all_links[2] as $index => $link_url ) {
+				$is_font_provider = false;
+				
+				// Check if this link is from a font provider
+				foreach ( $font_providers as $provider ) {
+					if ( stripos( $link_url, $provider ) !== false ) {
+						$is_font_provider = true;
+						break;
+					}
+				}
+				
+				if ( $is_font_provider ) {
+					// Fetch the font CSS with proper user agent (important for Google Fonts)
+					$response = wp_remote_get( $link_url, array( 
+						'timeout' => 10,
+						'user-agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+					) );
+					
+					if ( !is_wp_error( $response ) ) {
+						$font_css = wp_remote_retrieve_body( $response );
+						if ( !empty( $font_css ) ) {
+							$inlined_fonts_css .= "/* Inlined Font: " . $link_url . " */\n";
+							$inlined_fonts_css .= $font_css . "\n\n";
+							$font_links_removed++;
+							
+							// Remove this font link from HTML
+							$html = str_replace( $all_links[0][$index], '', $html );
+						}
+					}
+				}
+			}
+		}
+		
+		// Step 2: Extract all remaining CSS URLs from the page
 		preg_match_all( '/<link([^>]*?)href=["\']([^"\']+\.css[^"\']*?)["\']([^>]*?)>/i', $html, $css_matches );
 		
 		$css_urls = array();
@@ -1236,10 +1286,18 @@ function aero_process_html_assets( $html ) {
 			$css_urls = array_unique( $css_matches[2] );
 		}
 		
-		// Step 2: Collect and combine all CSS content
+		// Step 3: Collect and combine all CSS content
 		$combined_css = '';
 		$collected_count = 0;
 		
+		// Add inlined fonts first (critical for render)
+		if ( !empty( $inlined_fonts_css ) ) {
+			$combined_css .= "/* === INLINED FONTS ($font_links_removed font files) === */\n";
+			$combined_css .= $inlined_fonts_css;
+			$combined_css .= "/* === END INLINED FONTS === */\n\n";
+		}
+		
+		// Then add all other CSS
 		foreach ( $css_urls as $css_url ) {
 			// Try to get the file path
 			$css_path = aero_url_to_path( $css_url );
@@ -1267,8 +1325,8 @@ function aero_process_html_assets( $html ) {
 			}
 		}
 		
-		// Step 3: Minify and save the combined CSS if we collected anything
-		if ( !empty( $combined_css ) && $collected_count > 0 ) {
+		// Step 4: Minify and save the combined CSS if we collected anything
+		if ( !empty( $combined_css ) && ( $collected_count > 0 || $font_links_removed > 0 ) ) {
 			try {
 				// Create a unique filename based on content hash
 				$content_hash = md5( $combined_css );
@@ -1283,10 +1341,10 @@ function aero_process_html_assets( $html ) {
 					$minifier->minify( $combined_path );
 				}
 				
-				// Step 4: Remove all existing CSS links from HTML
+				// Step 5: Remove all existing CSS links from HTML
 				$html = preg_replace( '/<link([^>]*?)href=["\']([^"\']+\.css[^"\']*?)["\']([^>]*?)>/i', '', $html );
 				
-				// Step 5: Insert single combined CSS file before </head>
+				// Step 6: Insert single combined CSS file before </head>
 				$combined_tag = '<link rel="stylesheet" href="' . esc_url( $combined_url ) . '" id="aero-guest-combined-css">';
 				$html = str_replace( '</head>', $combined_tag . "\n</head>", $html );
 			} catch ( Exception $e ) {
@@ -1297,8 +1355,11 @@ function aero_process_html_assets( $html ) {
 			}
 		}
 		
-		// Step 6: Remove ALL JavaScript
+		// Step 7: Remove ALL JavaScript
 		$html = preg_replace( '/<script[^>]*>.*?<\/script>/is', '', $html );
+		
+		// Step 8: Remove font preconnect hints (no longer needed)
+		$html = preg_replace( '/<link[^>]*?rel=["\']preconnect["\'][^>]*?(fonts\.googleapis\.com|fonts\.gstatic\.com|use\.typekit\.net)[^>]*?>/i', '', $html );
 		
 		return $html;
 	}
