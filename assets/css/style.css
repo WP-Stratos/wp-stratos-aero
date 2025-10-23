@@ -129,6 +129,12 @@ body.settings_page_aero .aero-container input[type="checkbox"] {
 	cursor: pointer;
 }
 
+body.settings_page_aero .aero-container input[type="radio"] {
+	background: #000 !important;
+	border: 1px solid #313131 !important;
+	cursor: pointer;
+}
+
 body.settings_page_aero .aero-button {
 	background: #2e5aac !important;
 	border: none !important;
@@ -242,7 +248,7 @@ body.settings_page_aero .aero-accordion-content {
 }
 
 body.settings_page_aero .aero-accordion-content.active {
-	max-height: 600px;
+	max-height: 1000px;
 	border-top: 1px solid #313131;
 }
 
@@ -309,6 +315,156 @@ body.settings_page_aero .aero-debug-box .button-small {
 
 body.settings_page_aero .aero-debug-box .button-small:hover {
 	background: #244a8f !important;
+}
+
+/* Guest Mode Radio Options */
+body.settings_page_aero .aero-radio-cards {
+	display: grid;
+	gap: 12px;
+	margin-top: 15px;
+}
+
+body.settings_page_aero .aero-radio-card {
+	position: relative;
+	background: rgba(255, 255, 255, 0.03) !important;
+	border: 1px solid #313131 !important;
+	border-radius: 0 !important;
+	padding: 16px 20px !important;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+body.settings_page_aero .aero-radio-card:hover {
+	background: rgba(255, 255, 255, 0.05) !important;
+	border-color: #4a4a4a !important;
+}
+
+body.settings_page_aero .aero-radio-card.selected {
+	background: rgba(46, 90, 172, 0.08) !important;
+	border-color: #2e5aac !important;
+}
+
+body.settings_page_aero .aero-radio-card.selected:hover {
+	background: rgba(46, 90, 172, 0.12) !important;
+}
+
+body.settings_page_aero .aero-radio-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+}
+
+body.settings_page_aero .aero-radio-card-title {
+	font-size: 15px;
+	font-weight: 600;
+	color: #e5e5e5 !important;
+	margin: 0;
+}
+
+body.settings_page_aero .aero-radio-card.selected .aero-radio-card-title {
+	color: #2e5aac !important;
+}
+
+body.settings_page_aero .aero-radio-card-description {
+	font-size: 13px;
+	color: #999 !important;
+	line-height: 1.5;
+	margin: 0;
+}
+
+/* Custom Radio Button */
+body.settings_page_aero .aero-radio-card input[type="radio"] {
+	appearance: none;
+	-webkit-appearance: none;
+	-moz-appearance: none;
+	width: 20px;
+	height: 20px;
+	border: 2px solid #313131 !important;
+	border-radius: 50% !important;
+	background: #000 !important;
+	cursor: pointer;
+	position: relative;
+	margin: 0 !important;
+	flex-shrink: 0;
+	transition: all 0.2s ease;
+}
+
+body.settings_page_aero .aero-radio-card:hover input[type="radio"] {
+	border-color: #4a4a4a !important;
+}
+
+body.settings_page_aero .aero-radio-card input[type="radio"]:checked {
+	border-color: #2e5aac !important;
+	background: #2e5aac !important;
+}
+
+body.settings_page_aero .aero-radio-card input[type="radio"]:checked::before {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-85%, -85%);
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #fff;
+}
+
+/* Special styling for warning option (Extreme) */
+body.settings_page_aero .aero-radio-card.warning .aero-radio-card-title {
+	color: #ff9800 !important;
+}
+
+body.settings_page_aero .aero-radio-card.warning.selected {
+	background: rgba(255, 152, 0, 0.08) !important;
+	border-color: #ff9800 !important;
+}
+
+body.settings_page_aero .aero-radio-card.warning.selected:hover {
+	background: rgba(255, 152, 0, 0.12) !important;
+}
+
+body.settings_page_aero .aero-radio-card.warning input[type="radio"]:checked {
+	border-color: #ff9800 !important;
+	background: #ff9800 !important;
+}
+
+/* Advanced CSS Injection Textarea */
+body.settings_page_aero .aero-css-textarea {
+	width: 100% !important;
+	min-height: 200px !important;
+	background: #0a0a0a !important;
+	color: #e5e5e5 !important;
+	border: 1px solid #313131 !important;
+	border-radius: 0 !important;
+	padding: 12px !important;
+	font-family: 'Courier New', Courier, monospace !important;
+	font-size: 13px !important;
+	line-height: 1.6 !important;
+	resize: vertical !important;
+	box-sizing: border-box !important;
+	transition: border-color 0.2s ease !important;
+}
+
+body.settings_page_aero .aero-css-textarea:focus {
+	outline: none !important;
+	border-color: #2e5aac !important;
+	background: #000 !important;
+}
+
+body.settings_page_aero .aero-css-textarea::placeholder {
+	color: #666 !important;
+	opacity: 1 !important;
+}
+
+body.settings_page_aero .aero-setting-group code {
+	background: #0a0a0a !important;
+	color: #2e5aac !important;
+	padding: 2px 6px !important;
+	border-radius: 0 !important;
+	font-family: 'Courier New', Courier, monospace !important;
+	font-size: 12px !important;
 }
 
 /* Footer */
@@ -521,117 +677,4 @@ body.settings_page_aero .aero-diagnostic-spinner {
 	to {
 		transform: rotate(360deg);
 	}
-}
-
-/* Guest Mode Radio Options */
-body.settings_page_aero .aero-radio-cards {
-	display: grid;
-	gap: 12px;
-	margin-top: 15px;
-}
-
-body.settings_page_aero .aero-radio-card {
-	position: relative;
-	background: rgba(255, 255, 255, 0.03) !important;
-	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
-	padding: 16px 20px !important;
-	cursor: pointer;
-	transition: all 0.2s ease;
-}
-
-body.settings_page_aero .aero-radio-card:hover {
-	background: rgba(255, 255, 255, 0.05) !important;
-	border-color: #4a4a4a !important;
-}
-
-body.settings_page_aero .aero-radio-card.selected {
-	background: rgba(46, 90, 172, 0.08) !important;
-	border-color: #2e5aac !important;
-}
-
-body.settings_page_aero .aero-radio-card.selected:hover {
-	background: rgba(46, 90, 172, 0.12) !important;
-}
-
-body.settings_page_aero .aero-radio-card-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 8px;
-}
-
-body.settings_page_aero .aero-radio-card-title {
-	font-size: 15px;
-	font-weight: 600;
-	color: #e5e5e5 !important;
-	margin: 0;
-}
-
-body.settings_page_aero .aero-radio-card.selected .aero-radio-card-title {
-	color: #2e5aac !important;
-}
-
-body.settings_page_aero .aero-radio-card-description {
-	font-size: 13px;
-	color: #999 !important;
-	line-height: 1.5;
-	margin: 0;
-}
-
-/* Custom Radio Button */
-body.settings_page_aero .aero-radio-card input[type="radio"] {
-	appearance: none;
-	-webkit-appearance: none;
-	-moz-appearance: none;
-	width: 20px;
-	height: 20px;
-	border: 2px solid #313131 !important;
-	border-radius: 50% !important;
-	background: #000 !important;
-	cursor: pointer;
-	position: relative;
-	margin: 0 !important;
-	flex-shrink: 0;
-	transition: all 0.2s ease;
-}
-
-body.settings_page_aero .aero-radio-card:hover input[type="radio"] {
-	border-color: #4a4a4a !important;
-}
-
-body.settings_page_aero .aero-radio-card input[type="radio"]:checked {
-	border-color: #2e5aac !important;
-	background: #2e5aac !important;
-}
-
-body.settings_page_aero .aero-radio-card input[type="radio"]:checked::before {
-	content: '';
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-85%, -85%);
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: #fff;
-}
-
-/* Special styling for warning option (Extreme) */
-body.settings_page_aero .aero-radio-card.warning .aero-radio-card-title {
-	color: #ff9800 !important;
-}
-
-body.settings_page_aero .aero-radio-card.warning.selected {
-	background: rgba(255, 152, 0, 0.08) !important;
-	border-color: #ff9800 !important;
-}
-
-body.settings_page_aero .aero-radio-card.warning.selected:hover {
-	background: rgba(255, 152, 0, 0.12) !important;
-}
-
-body.settings_page_aero .aero-radio-card.warning input[type="radio"]:checked {
-	border-color: #ff9800 !important;
-	background: #ff9800 !important;
 }

@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.11
+Version: 1.6.0
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.11' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.6.0' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -137,6 +137,23 @@ function aero_add_critical_css() {
 	}
 }
 
+// Inject custom CSS for normal mode
+add_action( 'wp_head', 'aero_inject_custom_css', 999 );
+function aero_inject_custom_css() {
+	// Don't inject on admin or if guest mode is active
+	if ( is_admin() || aero_is_guest_visitor() ) {
+		return;
+	}
+	
+	$custom_css = get_option( 'aero_custom_css_normal', '' );
+	
+	if ( !empty( trim( $custom_css ) ) ) {
+		echo '<style id="aero-custom-css">' . "\n";
+		echo wp_strip_all_tags( $custom_css );
+		echo "\n" . '</style>' . "\n";
+	}
+}
+
 add_action( 'admin_menu', 'aero_add_admin_menu' );
 function aero_add_admin_menu() {
 	add_options_page( 'Aero', 'Aero', 'manage_options', 'aero', 'aero_admin_options' );
@@ -200,6 +217,8 @@ function aero_admin_options() {
 				$preload_critical_val = ( isset( $_POST[$preload_critical] ) ? 'on' : 'off' );
 				$guest_mode_level_val = isset( $_POST[$guest_mode_level] ) ? $_POST[$guest_mode_level] : 'off';
 				$debug_mode_val = ( isset( $_POST[$debug_mode] ) ? 'on' : 'off' );
+				$custom_css_normal = isset( $_POST['aero_custom_css_normal'] ) ? $_POST['aero_custom_css_normal'] : '';
+				$custom_css_guest = isset( $_POST['aero_custom_css_guest'] ) ? $_POST['aero_custom_css_guest'] : '';
 	
 				update_option( $combine_js, $combine_js_val );
 				update_option( $combine_css, $combine_css_val );
@@ -209,6 +228,8 @@ function aero_admin_options() {
 				update_option( $preload_critical, $preload_critical_val );
 				update_option( $guest_mode_level, $guest_mode_level_val );
 				update_option( $debug_mode, $debug_mode_val );
+				update_option( 'aero_custom_css_normal', $custom_css_normal );
+				update_option( 'aero_custom_css_guest', $custom_css_guest );	
 	
 				echo '<div class="updated aero-notice"><p><strong>Settings Saved.</strong></p></div>';
 			}
@@ -465,6 +486,50 @@ function aero_admin_options() {
 						<textarea id="aero-debug-info" readonly style="width: 100%; height: 300px; background: #0a0a0a; color: #0f0; border: 1px solid #313131; padding: 10px; font-family: monospace; font-size: 12px; line-height: 1.5;"><?php echo esc_textarea( aero_generate_debug_info() ); ?></textarea>
 					</div>
 					<?php endif; ?>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="aero-accordion" style="margin-top: 15px;">
+		<button type="button" class="aero-accordion-header" onclick="aeroToggleAccordion(this)">
+			<span>Advanced CSS Injection</span>
+			<span class="aero-accordion-icon">▼</span>
+		</button>
+		<div class="aero-accordion-content">
+			<div class="aero-accordion-inner">
+				<div class="aero-setting-group">
+					<label for="aero_custom_css_normal">
+						<strong>Custom CSS (Normal Mode)</strong>
+					</label>
+					<div class="aero-setting-description" style="margin-bottom: 10px;">
+						This CSS will be injected inline in the <code>&lt;head&gt;</code> for regular visitors only. Use this for custom styles that should appear during normal site operation. Not included in Guest Mode.
+					</div>
+					<textarea 
+						name="aero_custom_css_normal" 
+						id="aero_custom_css_normal" 
+						class="aero-css-textarea"
+						placeholder="/* Example: Hide elements that break layout */&#10;.problematic-element {&#10;    display: none !important;&#10;}"
+					><?php echo esc_textarea( get_option('aero_custom_css_normal', '') ); ?></textarea>
+				</div>
+				
+				<div class="aero-setting-group" style="margin-top: 20px;">
+					<label for="aero_custom_css_guest">
+						<strong>Custom CSS (Guest Mode Only)</strong>
+					</label>
+					<div class="aero-setting-description" style="margin-bottom: 10px;">
+						This CSS will be appended to the combined CSS file when Guest Mode is active. Use this to fix visibility issues caused by JavaScript removal (e.g., GSAP animations stuck at opacity: 0). Only appears for PageSpeed testing tools.
+					</div>
+					<textarea 
+						name="aero_custom_css_guest" 
+						id="aero_custom_css_guest" 
+						class="aero-css-textarea"
+						placeholder="/* Example: Fix GSAP animations stuck at opacity 0 */&#10;.gsap-animated,&#10;.fade-in-element {&#10;    opacity: 1 !important;&#10;    transform: none !important;&#10;}"
+					><?php echo esc_textarea( get_option('aero_custom_css_guest', '') ); ?></textarea>
+				</div>
+				
+				<div class="aero-setting-description" style="margin-top: 15px; padding: 12px; background: rgba(46, 90, 172, 0.08); border-left: 3px solid #2e5aac;">
+					<strong>💡 Pro Tip:</strong> Use browser DevTools to inspect elements that appear broken in Guest Mode. Common fixes include setting <code>opacity: 1</code>, <code>display: block</code>, or <code>visibility: visible</code> on elements that rely on JavaScript for initial visibility.
 				</div>
 			</div>
 		</div>
@@ -1300,6 +1365,14 @@ function aero_process_html_assets( $html ) {
 			$combined_css .= "/* === INLINED FONTS ($font_links_removed font files) === */\n";
 			$combined_css .= $inlined_fonts_css;
 			$combined_css .= "/* === END INLINED FONTS === */\n\n";
+		}
+
+		// Add custom guest mode CSS
+		$custom_guest_css = get_option( 'aero_custom_css_guest', '' );
+		if ( !empty( trim( $custom_guest_css ) ) ) {
+			$combined_css .= "/* === CUSTOM GUEST MODE CSS === */\n";
+			$combined_css .= wp_strip_all_tags( $custom_guest_css ) . "\n\n";
+			$combined_css .= "/* === END CUSTOM GUEST MODE CSS === */\n\n";
 		}
 		
 		// Then add all other CSS
