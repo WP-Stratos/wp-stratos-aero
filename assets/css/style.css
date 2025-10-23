@@ -610,7 +610,7 @@ body.settings_page_aero .aero-radio-card input[type="radio"]:checked::before {
 	position: absolute;
 	top: 50%;
 	left: 50%;
-	transform: translate(-50%, -50%);
+	transform: translate(-85%, -85%);
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
