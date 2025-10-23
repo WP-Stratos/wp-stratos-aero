@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.6
+Version: 1.5.7
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.6' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.7' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -417,7 +417,7 @@ function aero_admin_options() {
 							<span style="font-weight: 500; color: #2e5aac;">Basic Guest Mode (Recommended)</span>
 						</label>
 						<div class="aero-setting-description" style="margin-left: 28px; margin-top: 5px;">
-							Removes render-blocking resources and jQuery for PageSpeed tools. Keeps core styling and layout intact. Target: 80+ mobile score.
+							Combines ALL CSS files into one minified file and removes all JavaScript for PageSpeed tools. Target: 90+ mobile score.
 						</div>
 					</div>
 					
@@ -1226,72 +1226,78 @@ function aero_process_html_assets( $html ) {
 		return $html;
 	}
 	
-	// BASIC GUEST MODE - Balanced approach for 80+ scores
+	// BASIC GUEST MODE - Combine all CSS into one file, remove all JS
 	if ( $guest_mode_level === 'basic' ) {
-		// Step 1: Remove Google Fonts completely and add fallback
-		$html = preg_replace( '/<link[^>]*?fonts\.googleapis\.com[^>]*?>/i', '', $html );
+		// Step 1: Extract all CSS URLs from the page
+		preg_match_all( '/<link([^>]*?)href=["\']([^"\']+\.css[^"\']*?)["\']([^>]*?)>/i', $html, $css_matches );
 		
-		// Step 2: Inject minimal critical inline CSS for basic styling
-		$critical_css = '<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;margin:0;padding:0;line-height:1.6;color:#333;background:#fff}*{box-sizing:border-box}img{max-width:100%;height:auto;display:block}.elementor-section{padding:20px 0}.elementor-container{max-width:1140px;margin:0 auto;padding:0 15px}.elementor-column{width:100%;padding:10px}.elementor-widget{margin-bottom:20px}h1,h2,h3,h4,h5,h6{margin:0 0 15px;line-height:1.2;font-weight:600}p{margin:0 0 15px}a{color:#2e5aac;text-decoration:none}@media (min-width:768px){.elementor-column{width:50%;display:inline-block;vertical-align:top}}</style>';
+		$css_urls = array();
+		if ( !empty( $css_matches[2] ) ) {
+			$css_urls = array_unique( $css_matches[2] );
+		}
 		
-		// Insert before </head>
-		$html = str_replace( '</head>', $critical_css . '</head>', $html );
+		// Step 2: Collect and combine all CSS content
+		$combined_css = '';
+		$collected_count = 0;
 		
-		// Step 3: Remove all animation CSS
-		$html = preg_replace( '/<link[^>]*?(animation|fadeIn|slideIn|sink|float)[^>]*?>/i', '', $html );
-		
-		// Step 4: Keep only essential Elementor CSS - frontend and swiper
-		$css_count = 0;
-		$kept_css = array();
-		$html = preg_replace_callback(
-			'/<link([^>]*?)rel=["\']stylesheet["\']([^>]*?)>/i',
-			function( $matches ) use ( &$css_count, &$kept_css ) {
-				$full_tag = $matches[0];
-				$url = '';
-				if ( preg_match( '/href=["\']([^"\']+)["\']/', $full_tag, $href ) ) {
-					$url = $href[1];
+		foreach ( $css_urls as $css_url ) {
+			// Try to get the file path
+			$css_path = aero_url_to_path( $css_url );
+			
+			// If local file exists, read it
+			if ( $css_path && file_exists( $css_path ) ) {
+				$css_content = @file_get_contents( $css_path );
+				if ( $css_content !== false ) {
+					$combined_css .= "/* Source: " . basename( $css_url ) . " */\n";
+					$combined_css .= $css_content . "\n\n";
+					$collected_count++;
 				}
-				
-				// Always keep: frontend.min.css, swiper CSS
-				if ( stripos( $url, 'frontend.min.css' ) !== false || 
-				     stripos( $url, 'swiper' ) !== false ||
-				     stripos( $url, 'elementor.css' ) !== false ) {
-					return $full_tag;
-				}
-				
-				// Remove: animations, media element, individual widgets
-				$remove_patterns = array(
-					'animation',
-					'mediaelement',
-					'widget-icon',
-					'widget-heading',
-					'widget-image',
-					'widget-social',
-					'widget-testimonial',
-					'widget-star-rating',
-					'widget-image-box',
-					'apple-webkit'
-				);
-				
-				foreach ( $remove_patterns as $pattern ) {
-					if ( stripos( $url, $pattern ) !== false ) {
-						return '';
+			}
+			// For external URLs, try to fetch
+			elseif ( !aero_is_local_url( $css_url ) ) {
+				$response = wp_remote_get( $css_url, array( 'timeout' => 5 ) );
+				if ( !is_wp_error( $response ) ) {
+					$css_content = wp_remote_retrieve_body( $response );
+					if ( !empty( $css_content ) ) {
+						$combined_css .= "/* Source: " . basename( $css_url ) . " */\n";
+						$combined_css .= $css_content . "\n\n";
+						$collected_count++;
 					}
 				}
+			}
+		}
+		
+		// Step 3: Minify and save the combined CSS if we collected anything
+		if ( !empty( $combined_css ) && $collected_count > 0 ) {
+			try {
+				// Create a unique filename based on content hash
+				$content_hash = md5( $combined_css );
+				$combined_filename = 'guest-basic-combined-' . $content_hash . '.css';
+				$combined_path = AERO_CSS_CACHE_DIR . $combined_filename;
+				$combined_url = content_url() . '/cache/aero/css/' . $combined_filename;
 				
-				// Keep the first 2 general CSS files
-				if ( $css_count < 2 ) {
-					$css_count++;
-					return $full_tag;
+				// Only generate if doesn't exist
+				if ( !file_exists( $combined_path ) ) {
+					$minifier = new MatthiasMullie\Minify\CSS();
+					$minifier->add( $combined_css );
+					$minifier->minify( $combined_path );
 				}
 				
-				// Remove everything else
-				return '';
-			},
-			$html
-		);
+				// Step 4: Remove all existing CSS links from HTML
+				$html = preg_replace( '/<link([^>]*?)href=["\']([^"\']+\.css[^"\']*?)["\']([^>]*?)>/i', '', $html );
+				
+				// Step 5: Insert single combined CSS file before </head>
+				$combined_tag = '<link rel="stylesheet" href="' . esc_url( $combined_url ) . '" id="aero-guest-combined-css">';
+				$html = str_replace( '</head>', $combined_tag . "\n</head>", $html );
+			} catch ( Exception $e ) {
+				// If minification fails, fall back to injecting raw combined CSS
+				$combined_tag = '<style id="aero-guest-combined-css">' . $combined_css . '</style>';
+				$html = preg_replace( '/<link([^>]*?)href=["\']([^"\']+\.css[^"\']*?)["\']([^>]*?)>/i', '', $html );
+				$html = str_replace( '</head>', $combined_tag . "\n</head>", $html );
+			}
+		}
 		
-		// Step 5: Remove ALL JavaScript including jQuery
+		// Step 6: Remove ALL JavaScript
 		$html = preg_replace( '/<script[^>]*>.*?<\/script>/is', '', $html );
 		
 		return $html;
