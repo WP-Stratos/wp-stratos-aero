@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.5.8
+Version: 1.5.9
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.8' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.5.9' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -1264,8 +1264,11 @@ function aero_process_html_assets( $html ) {
 					) );
 					
 					if ( !is_wp_error( $response ) ) {
+						$response_code = wp_remote_retrieve_response_code( $response );
 						$font_css = wp_remote_retrieve_body( $response );
-						if ( !empty( $font_css ) ) {
+						
+						// Validate: Only add if response is 200 and content is actually CSS
+						if ( $response_code === 200 && !empty( $font_css ) && aero_is_valid_css( $font_css ) ) {
 							$inlined_fonts_css .= "/* Inlined Font: " . $link_url . " */\n";
 							$inlined_fonts_css .= $font_css . "\n\n";
 							$font_links_removed++;
@@ -1305,7 +1308,7 @@ function aero_process_html_assets( $html ) {
 			// If local file exists, read it
 			if ( $css_path && file_exists( $css_path ) ) {
 				$css_content = @file_get_contents( $css_path );
-				if ( $css_content !== false ) {
+				if ( $css_content !== false && aero_is_valid_css( $css_content ) ) {
 					$combined_css .= "/* Source: " . basename( $css_url ) . " */\n";
 					$combined_css .= $css_content . "\n\n";
 					$collected_count++;
@@ -1315,8 +1318,11 @@ function aero_process_html_assets( $html ) {
 			elseif ( !aero_is_local_url( $css_url ) ) {
 				$response = wp_remote_get( $css_url, array( 'timeout' => 5 ) );
 				if ( !is_wp_error( $response ) ) {
+					$response_code = wp_remote_retrieve_response_code( $response );
 					$css_content = wp_remote_retrieve_body( $response );
-					if ( !empty( $css_content ) ) {
+					
+					// Validate: Only add if response is 200 and content is actually CSS
+					if ( $response_code === 200 && !empty( $css_content ) && aero_is_valid_css( $css_content ) ) {
 						$combined_css .= "/* Source: " . basename( $css_url ) . " */\n";
 						$combined_css .= $css_content . "\n\n";
 						$collected_count++;
@@ -1328,17 +1334,20 @@ function aero_process_html_assets( $html ) {
 		// Step 4: Minify and save the combined CSS if we collected anything
 		if ( !empty( $combined_css ) && ( $collected_count > 0 || $font_links_removed > 0 ) ) {
 			try {
-				// Create a unique filename based on content hash
-				$content_hash = md5( $combined_css );
+				// Minify the CSS first
+				$minifier = new MatthiasMullie\Minify\CSS();
+				$minifier->add( $combined_css );
+				$minified_css = $minifier->minify();
+				
+				// Create a unique filename based on minified content hash
+				$content_hash = md5( $minified_css );
 				$combined_filename = 'guest-basic-combined-' . $content_hash . '.css';
 				$combined_path = AERO_CSS_CACHE_DIR . $combined_filename;
 				$combined_url = content_url() . '/cache/aero/css/' . $combined_filename;
 				
-				// Only generate if doesn't exist
+				// Save the minified CSS
 				if ( !file_exists( $combined_path ) ) {
-					$minifier = new MatthiasMullie\Minify\CSS();
-					$minifier->add( $combined_css );
-					$minifier->minify( $combined_path );
+					file_put_contents( $combined_path, $minified_css );
 				}
 				
 				// Step 5: Remove all existing CSS links from HTML
@@ -1348,9 +1357,18 @@ function aero_process_html_assets( $html ) {
 				$combined_tag = '<link rel="stylesheet" href="' . esc_url( $combined_url ) . '" id="aero-guest-combined-css">';
 				$html = str_replace( '</head>', $combined_tag . "\n</head>", $html );
 			} catch ( Exception $e ) {
-				// If minification fails, fall back to injecting raw combined CSS
-				$combined_tag = '<style id="aero-guest-combined-css">' . $combined_css . '</style>';
+				// If minification fails, still save unminified but valid CSS
+				$content_hash = md5( $combined_css );
+				$combined_filename = 'guest-basic-combined-' . $content_hash . '.css';
+				$combined_path = AERO_CSS_CACHE_DIR . $combined_filename;
+				$combined_url = content_url() . '/cache/aero/css/' . $combined_filename;
+				
+				if ( !file_exists( $combined_path ) ) {
+					file_put_contents( $combined_path, $combined_css );
+				}
+				
 				$html = preg_replace( '/<link([^>]*?)href=["\']([^"\']+\.css[^"\']*?)["\']([^>]*?)>/i', '', $html );
+				$combined_tag = '<link rel="stylesheet" href="' . esc_url( $combined_url ) . '" id="aero-guest-combined-css">';
 				$html = str_replace( '</head>', $combined_tag . "\n</head>", $html );
 			}
 		}
@@ -1556,6 +1574,45 @@ function aero_minify_file( $file_url, $type ) {
 	} catch ( Exception $e ) {
 		return false;
 	}
+}
+
+/**
+ * Validate if content is actually CSS and not HTML or other content
+ */
+function aero_is_valid_css( $content ) {
+	if ( empty( $content ) ) {
+		return false;
+	}
+	
+	// Trim whitespace
+	$content = trim( $content );
+	
+	// Check for HTML tags - if present, it's not valid CSS
+	if ( preg_match( '/<(!DOCTYPE|html|head|body|title|meta|script|div|span|p|a|img)/i', $content ) ) {
+		return false;
+	}
+	
+	// Check for common CSS patterns (at least one should be present)
+	$css_patterns = array(
+		'/\{[^}]*\}/',           // CSS blocks with braces
+		'/@font-face/',          // Font declarations
+		'/@media/',              // Media queries
+		'/@import/',             // Import statements
+		'/@charset/',            // Charset declarations
+		'/\.[a-zA-Z]/',          // Class selectors
+		'/#[a-zA-Z]/',           // ID selectors
+		'/[a-zA-Z]+\s*\{/',      // Element selectors
+	);
+	
+	$has_css_pattern = false;
+	foreach ( $css_patterns as $pattern ) {
+		if ( preg_match( $pattern, $content ) ) {
+			$has_css_pattern = true;
+			break;
+		}
+	}
+	
+	return $has_css_pattern;
 }
 
 function aero_url_to_path( $url ) {
