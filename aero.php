@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.6.0
+Version: 1.7.0
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.6.0' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.7.0' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -72,6 +72,7 @@ function aero_ajax_get_diagnostics() {
 	
 	$hosting_info = aero_check_hosting_environment();
 	$dropins = aero_check_dropins();
+	$batcache = aero_check_batcache_config(); // ADD THIS LINE
 	
 	// Get cache statistics
 	$css_cache_size = aero_get_directory_size(AERO_CSS_CACHE_DIR);
@@ -84,6 +85,7 @@ function aero_ajax_get_diagnostics() {
 	wp_send_json_success( array(
 		'hosting' => $hosting_info,
 		'dropins' => $dropins,
+		'batcache' => $batcache, // ADD THIS LINE
 		'cache_stats' => array(
 			'css_files' => $css_file_count,
 			'js_files' => $js_file_count,
@@ -120,6 +122,28 @@ function aero_ajax_refresh_debug() {
 	wp_send_json_success( array(
 		'debug_info' => $fresh_debug_info
 	) );
+}
+
+// Register AJAX handler for auto-configuring Batcache
+add_action( 'wp_ajax_aero_auto_configure_batcache', 'aero_ajax_auto_configure_batcache' );
+function aero_ajax_auto_configure_batcache() {
+	check_ajax_referer( 'aero_batcache_nonce', 'nonce' );
+	
+	if ( !current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => 'Unauthorized' ) );
+	}
+	
+	if ( !aero_can_configure_batcache() ) {
+		wp_send_json_error( array( 'message' => 'Requirements not met for Batcache configuration' ) );
+	}
+	
+	$result = aero_add_batcache_config();
+	
+	if ( $result['success'] ) {
+		wp_send_json_success( $result );
+	} else {
+		wp_send_json_error( $result );
+	}
 }
 
 add_action( 'admin_head', 'aero_add_critical_css' );
@@ -207,6 +231,20 @@ function aero_admin_options() {
     	if ( isset( $_REQUEST['_wpnonce'] ) && wp_verify_nonce( $_REQUEST['_wpnonce'], 'aero_settings_nonce' ) ) {
 			if ( isset( $_POST['aero_clear_minified'] ) ) {
 				aero_clear_minified_cache();
+			}
+			// Handle Batcache configuration update
+			elseif ( isset( $_POST['aero_save_batcache'] ) && aero_can_configure_batcache() ) {
+				$batcache_max_age = isset( $_POST['aero_batcache_max_age'] ) ? intval($_POST['aero_batcache_max_age']) : 86400;
+				$batcache_seconds = isset( $_POST['aero_batcache_seconds'] ) ? intval($_POST['aero_batcache_seconds']) : 0;
+				$batcache_times = isset( $_POST['aero_batcache_times'] ) ? intval($_POST['aero_batcache_times']) : 1;
+				
+				$result = aero_update_batcache_config($batcache_max_age, $batcache_seconds, $batcache_times);
+				
+				if ($result['success']) {
+					echo '<div class="updated aero-notice"><p><strong>' . esc_html($result['message']) . '</strong></p></div>';
+				} else {
+					echo '<div class="error aero-notice"><p><strong>Error:</strong> ' . esc_html($result['message']) . '</p></div>';
+				}
 			}
 			else {			
 				$combine_js_val = ( isset( $_POST[$combine_js] ) ? 'on' : 'off' );
@@ -325,6 +363,7 @@ function aero_admin_options() {
 		function aeroUpdateDiagnostics(data) {
 			var hosting = data.hosting;
 			var dropins = data.dropins;
+			var batcache = data.batcache;
 			
 			var checks = [
 				{
@@ -341,6 +380,14 @@ function aero_admin_options() {
 					label: 'Page Cache (advanced-cache.php)',
 					status: dropins.advanced_cache,
 					type: 'important'
+				},
+				{
+					label: 'Batcache Configuration',
+					status: batcache.exists,
+					type: 'optional',
+					extra: batcache.exists ? 
+						'Max Age: ' + batcache.values.max_age + 's, Times: ' + batcache.values.times : 
+						''
 				}
 			];
 			
@@ -358,16 +405,25 @@ function aero_admin_options() {
 				
 				html += '<div class="aero-diagnostic-item ' + statusClass + ' ' + typeClass + '">';
 				html += '<div class="aero-diagnostic-icon">' + icon + '</div>';
-				html += '<div class="aero-diagnostic-label">' + check.label + '</div></div>';
+				html += '<div class="aero-diagnostic-label">' + check.label;
+				if (check.extra) {
+					html += '<span class="aero-diagnostic-extra">' + check.extra + '</span>';
+				}
+				html += '</div></div>';
 			});
 			
 			$('#aero-diagnostics-list').html(html);
 			$('#aero-diagnostics-score').html(passed + '/' + checks.length + ' Passed');
 			
-			// Update container class
+			// Update container class and show upgrade notice
 			if (!hosting.is_wpstratos) {
 				$('#aero-diagnostics').addClass('aero-not-wpstratos');
 				$('#aero-upgrade-notice').show();
+			}
+			
+			// Show auto-configure button if eligible but not configured
+			if (hosting.is_wpstratos && dropins.object_cache && dropins.advanced_cache && !batcache.exists) {
+				$('#aero-batcache-auto-configure').show();
 			}
 		}
 	});
@@ -534,6 +590,167 @@ function aero_admin_options() {
 			</div>
 		</div>
 	</div>
+
+	<?php
+	// Only show Batcache settings if on WP Stratos hosting
+	$can_configure_batcache = aero_can_configure_batcache();
+	$batcache_config = aero_check_batcache_config();
+	if ( $can_configure_batcache ) :
+	?>
+	<div class="aero-accordion" style="margin-top: 15px;">
+		<button type="button" class="aero-accordion-header" onclick="aeroToggleAccordion(this)">
+			<span>
+				Page Cache Configuration (Batcache)
+				<?php if ( $batcache_config['exists'] ) : ?>
+					<span style="color: #059669; font-size: 13px; font-weight: 400; margin-left: 8px;">✓ Configured</span>
+				<?php endif; ?>
+			</span>
+			<span class="aero-accordion-icon">▼</span>
+		</button>
+		<div class="aero-accordion-content">
+			<div class="aero-accordion-inner">
+				<?php if ( !$batcache_config['exists'] ) : ?>
+					<div class="aero-batcache-notice" style="background: rgba(46, 90, 172, 0.08); border-left: 3px solid #2e5aac; padding: 15px; margin-bottom: 20px;">
+						<strong>Batcache Not Configured</strong><br>
+						Your site has all the requirements but Batcache hasn't been configured in wp-config.php yet. 
+						Click the button below to automatically add optimized Batcache settings.
+						<div style="margin-top: 15px;">
+							<button type="button" id="aero-batcache-auto-configure" class="button aero-button" style="display: none;">
+								Auto-Configure Batcache
+							</button>
+							<span id="aero-batcache-auto-status" style="margin-left: 10px; color: #999;"></span>
+						</div>
+					</div>
+				<?php endif; ?>
+				
+				<?php if ( !$batcache_config['writable'] ) : ?>
+					<div class="aero-batcache-notice" style="background: rgba(220, 38, 38, 0.08); border-left: 3px solid #dc2626; padding: 15px; margin-bottom: 20px;">
+						<strong>⚠️ Warning:</strong> wp-config.php is not writable. You'll need to manually add the Batcache configuration or make the file writable.
+					</div>
+				<?php endif; ?>
+				
+				<div class="aero-setting-group">
+					<div class="aero-setting-description" style="margin-bottom: 20px;">
+						Batcache is a server-side page caching system that stores rendered HTML pages to improve performance. 
+						These settings control how aggressive the caching is.
+					</div>
+					
+					<div style="display: grid; gap: 20px;">
+						<div class="aero-batcache-field">
+							<label for="aero_batcache_max_age">
+								<strong>Cache Lifetime (seconds)</strong>
+							</label>
+							<input 
+								type="number" 
+								name="aero_batcache_max_age" 
+								id="aero_batcache_max_age" 
+								value="<?php echo esc_attr( $batcache_config['values']['max_age'] ?? 86400 ); ?>"
+								min="0"
+								step="1"
+								class="aero-number-input"
+								<?php echo !$batcache_config['writable'] ? 'disabled' : ''; ?>
+							/>
+							<div class="aero-setting-description">
+								How long (in seconds) to store cached pages. Default: 86400 (24 hours).
+								<br><strong>Recommended:</strong> 86400-604800 (1-7 days)
+							</div>
+						</div>
+						
+						<div class="aero-batcache-field">
+							<label for="aero_batcache_seconds">
+								<strong>Wait Time (seconds)</strong>
+							</label>
+							<input 
+								type="number" 
+								name="aero_batcache_seconds" 
+								id="aero_batcache_seconds" 
+								value="<?php echo esc_attr( $batcache_config['values']['seconds'] ?? 0 ); ?>"
+								min="0"
+								step="1"
+								class="aero-number-input"
+								<?php echo !$batcache_config['writable'] ? 'disabled' : ''; ?>
+							/>
+							<div class="aero-setting-description">
+								How long to wait before caching. Set to 0 for instant caching. Default: 0.
+								<br><strong>Recommended:</strong> 0 (cache immediately)
+							</div>
+						</div>
+						
+						<div class="aero-batcache-field">
+							<label for="aero_batcache_times">
+								<strong>Visitor Threshold</strong>
+							</label>
+							<input 
+								type="number" 
+								name="aero_batcache_times" 
+								id="aero_batcache_times" 
+								value="<?php echo esc_attr( $batcache_config['values']['times'] ?? 1 ); ?>"
+								min="1"
+								step="1"
+								class="aero-number-input"
+								<?php echo !$batcache_config['writable'] ? 'disabled' : ''; ?>
+							/>
+							<div class="aero-setting-description">
+								Number of visitors required before a page is cached. Default: 1.
+								<br><strong>Recommended:</strong> 1 (cache after first visit)
+							</div>
+						</div>
+					</div>
+					
+					<?php if ( $batcache_config['writable'] && $batcache_config['exists'] ) : ?>
+					<div style="margin-top: 20px;">
+						<button type="submit" name="aero_save_batcache" class="button button-primary aero-button">
+							Update Batcache Settings
+						</button>
+						<span style="color: #999; font-size: 13px; margin-left: 10px;">
+							A backup of wp-config.php will be created automatically
+						</span>
+					</div>
+					<?php endif; ?>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script>
+	jQuery(document).ready(function($) {
+		// Handle auto-configure button
+		$('#aero-batcache-auto-configure').on('click', function() {
+			var btn = $(this);
+			var status = $('#aero-batcache-auto-status');
+			
+			btn.prop('disabled', true);
+			btn.text('Configuring...');
+			status.text('');
+			
+			$.ajax({
+				url: ajaxurl,
+				type: 'POST',
+				data: {
+					action: 'aero_auto_configure_batcache',
+					nonce: '<?php echo wp_create_nonce('aero_batcache_nonce'); ?>'
+				},
+				success: function(response) {
+					if (response.success) {
+						status.css('color', '#059669').text('✓ ' + response.data.message);
+						btn.text('✓ Configured');
+						setTimeout(function() {
+							location.reload();
+						}, 2000);
+					} else {
+						status.css('color', '#dc2626').text('Error: ' + response.data.message);
+						btn.prop('disabled', false).text('Try Again');
+					}
+				},
+				error: function() {
+					status.css('color', '#dc2626').text('Error: Failed to configure');
+					btn.prop('disabled', false).text('Try Again');
+				}
+			});
+		});
+	});
+	</script>
+	<?php endif; ?>
 
     <p style="margin-top: 20px;">
 		<input type="submit" value="<?php esc_attr_e('Save Changes') ?>" class="button button-primary aero-button" name="submit" />
@@ -751,6 +968,19 @@ function aero_generate_debug_info() {
 	$debug_info .= "JS Cache Dir: " . AERO_JS_CACHE_DIR . "\n";
 	$debug_info .= "JS Files Cached: " . aero_count_files(AERO_JS_CACHE_DIR) . "\n";
 	$debug_info .= "JS Cache Size: " . aero_format_bytes(aero_get_directory_size(AERO_JS_CACHE_DIR)) . "\n\n";
+
+	// Batcache Configuration
+	$batcache_config = aero_check_batcache_config();
+	$debug_info .= "--- BATCACHE CONFIGURATION ---\n";
+	$debug_info .= "Configured: " . ($batcache_config['exists'] ? 'Yes' : 'No') . "\n";
+	$debug_info .= "wp-config.php Writable: " . ($batcache_config['writable'] ? 'Yes' : 'No') . "\n";
+	if ($batcache_config['exists'] && $batcache_config['values']) {
+		$debug_info .= "Max Age: " . ($batcache_config['values']['max_age'] ?? 'Not set') . " seconds\n";
+		$debug_info .= "Wait Time (seconds): " . ($batcache_config['values']['seconds'] ?? 'Not set') . "\n";
+		$debug_info .= "Visitor Threshold (times): " . ($batcache_config['values']['times'] ?? 'Not set') . "\n";
+	}
+	$debug_info .= "Can Configure: " . (aero_can_configure_batcache() ? 'Yes' : 'No') . "\n";
+	$debug_info .= "\n";
 	
 	// Active Plugins
 	$debug_info .= "--- ACTIVE PLUGINS ---\n";
@@ -857,6 +1087,240 @@ function aero_check_dropins() {
 		'advanced_cache' => $advanced_cache,
 		'object_cache' => $object_cache
 	);
+}
+
+/**
+ * Check if site meets requirements for Batcache configuration
+ */
+function aero_can_configure_batcache() {
+	$hosting = aero_check_hosting_environment();
+	$dropins = aero_check_dropins();
+	
+	return $hosting['is_wpstratos'] && $dropins['advanced_cache'] && $dropins['object_cache'];
+}
+
+/**
+ * Check if Batcache configuration exists in wp-config.php
+ */
+function aero_check_batcache_config() {
+	$wp_config_path = aero_get_wp_config_path();
+	
+	if (!$wp_config_path || !file_exists($wp_config_path)) {
+		return array(
+			'exists' => false,
+			'writable' => false,
+			'values' => null
+		);
+	}
+	
+	$config_content = @file_get_contents($wp_config_path);
+	if ($config_content === false) {
+		return array(
+			'exists' => false,
+			'writable' => false,
+			'values' => null
+		);
+	}
+	
+	$has_batcache_config = (
+		strpos($config_content, 'Batcache Customizations') !== false ||
+		strpos($config_content, '$batcache') !== false
+	);
+	
+	$values = array(
+		'max_age' => null,
+		'seconds' => null,
+		'times' => null
+	);
+	
+	if ($has_batcache_config) {
+		// Extract values
+		if (preg_match('/\$batcache(?:->|\[[\'"]+)max_age(?:[\'"]+\])?\s*=\s*(\d+)/', $config_content, $matches)) {
+			$values['max_age'] = intval($matches[1]);
+		}
+		if (preg_match('/\$batcache(?:->|\[[\'"]+)seconds(?:[\'"]+\])?\s*=\s*(\d+)/', $config_content, $matches)) {
+			$values['seconds'] = intval($matches[1]);
+		}
+		if (preg_match('/\$batcache(?:->|\[[\'"]+)times(?:[\'"]+\])?\s*=\s*(\d+)/', $config_content, $matches)) {
+			$values['times'] = intval($matches[1]);
+		}
+	}
+	
+	return array(
+		'exists' => $has_batcache_config,
+		'writable' => is_writable($wp_config_path),
+		'values' => $values
+	);
+}
+
+/**
+ * Get wp-config.php file path
+ */
+function aero_get_wp_config_path() {
+	// Check standard location first
+	$config_path = ABSPATH . 'wp-config.php';
+	if (file_exists($config_path)) {
+		return $config_path;
+	}
+	
+	// Check one directory up (common for some setups)
+	$config_path = dirname(ABSPATH) . '/wp-config.php';
+	if (file_exists($config_path) && !file_exists(dirname(ABSPATH) . '/wp-settings.php')) {
+		return $config_path;
+	}
+	
+	return false;
+}
+
+/**
+ * Add Batcache configuration to wp-config.php
+ */
+function aero_add_batcache_config($max_age = 86400, $seconds = 0, $times = 1) {
+	$wp_config_path = aero_get_wp_config_path();
+	
+	if (!$wp_config_path || !file_exists($wp_config_path)) {
+		return array('success' => false, 'message' => 'wp-config.php not found');
+	}
+	
+	if (!is_writable($wp_config_path)) {
+		return array('success' => false, 'message' => 'wp-config.php is not writable');
+	}
+	
+	$config_content = file_get_contents($wp_config_path);
+	
+	// Check if already exists
+	if (strpos($config_content, 'Batcache Customizations') !== false) {
+		return array('success' => false, 'message' => 'Batcache configuration already exists');
+	}
+	
+	// Create backup
+	$backup_path = $wp_config_path . '.aero-backup-' . date('Y-m-d-His');
+	if (!@copy($wp_config_path, $backup_path)) {
+		return array('success' => false, 'message' => 'Failed to create backup');
+	}
+	
+	// Prepare Batcache configuration
+	$batcache_config = "\n//Batcache Customizations\n";
+	$batcache_config .= "global \$batcache;\n\n";
+	$batcache_config .= "//Check if batcache params are in an object or an array, apply customizations accordingly\n";
+	$batcache_config .= "if ( is_object( \$batcache ) ) {\n";
+	$batcache_config .= "    \$batcache->max_age = " . intval($max_age) . "; // Seconds the cached render of a page will be stored\n";
+	$batcache_config .= "    \$batcache->seconds = " . intval($seconds) . "; // Time number of visitors required to cache, 0 = instant\n";
+	$batcache_config .= "    \$batcache->times = " . intval($times) . "; // Number of visitors required to cache\n";
+	$batcache_config .= "} elseif ( is_array( \$batcache ) ) {\n";
+	$batcache_config .= "    \$batcache['max_age'] = " . intval($max_age) . "; // Seconds the cached render of a page will be stored\n";
+	$batcache_config .= "    \$batcache['seconds'] = " . intval($seconds) . "; // Time number of visitors required to cache, 0 = instant\n";
+	$batcache_config .= "    \$batcache['times'] = " . intval($times) . "; // Number of visitors required to cache\n";
+	$batcache_config .= "}\n";
+	$batcache_config .= "// End Batcache Customizations\n\n";
+	
+	// Find insertion point (before "That's all, stop editing!")
+	$stop_editing_pos = strpos($config_content, "/* That's all, stop editing!");
+	
+	if ($stop_editing_pos === false) {
+		// Try alternative patterns
+		$patterns = array(
+			"/* That's all, stop editing!",
+			"/* That's all, stop editing!",
+			"/*That's all, stop editing!"
+		);
+		
+		foreach ($patterns as $pattern) {
+			$stop_editing_pos = strpos($config_content, $pattern);
+			if ($stop_editing_pos !== false) break;
+		}
+		
+		if ($stop_editing_pos === false) {
+			// Insert before final closing PHP tag or at end
+			if (strpos($config_content, '?>') !== false) {
+				$config_content = str_replace('?>', $batcache_config . '?>', $config_content);
+			} else {
+				$config_content .= $batcache_config;
+			}
+		} else {
+			$config_content = substr_replace($config_content, $batcache_config, $stop_editing_pos, 0);
+		}
+	} else {
+		$config_content = substr_replace($config_content, $batcache_config, $stop_editing_pos, 0);
+	}
+	
+	// Write updated config
+	if (@file_put_contents($wp_config_path, $config_content) === false) {
+		// Restore backup on failure
+		@copy($backup_path, $wp_config_path);
+		@unlink($backup_path);
+		return array('success' => false, 'message' => 'Failed to write to wp-config.php');
+	}
+	
+	return array('success' => true, 'message' => 'Batcache configuration added successfully', 'backup' => $backup_path);
+}
+
+/**
+ * Update Batcache configuration in wp-config.php
+ */
+function aero_update_batcache_config($max_age, $seconds, $times) {
+	$wp_config_path = aero_get_wp_config_path();
+	
+	if (!$wp_config_path || !file_exists($wp_config_path)) {
+		return array('success' => false, 'message' => 'wp-config.php not found');
+	}
+	
+	if (!is_writable($wp_config_path)) {
+		return array('success' => false, 'message' => 'wp-config.php is not writable');
+	}
+	
+	$config_content = file_get_contents($wp_config_path);
+	
+	// Check if config exists
+	if (strpos($config_content, 'Batcache Customizations') === false) {
+		// Config doesn't exist, add it
+		return aero_add_batcache_config($max_age, $seconds, $times);
+	}
+	
+	// Create backup
+	$backup_path = $wp_config_path . '.aero-backup-' . date('Y-m-d-His');
+	if (!@copy($wp_config_path, $backup_path)) {
+		return array('success' => false, 'message' => 'Failed to create backup');
+	}
+	
+	// Update values
+	$config_content = preg_replace(
+		'/(\$batcache(?:->|\[[\'"]+)max_age(?:[\'"]+\])?\s*=\s*)\d+/',
+		'${1}' . intval($max_age),
+		$config_content
+	);
+	$config_content = preg_replace(
+		'/(\$batcache(?:->|\[[\'"]+)seconds(?:[\'"]+\])?\s*=\s*)\d+/',
+		'${1}' . intval($seconds),
+		$config_content
+	);
+	$config_content = preg_replace(
+		'/(\$batcache(?:->|\[[\'"]+)times(?:[\'"]+\])?\s*=\s*)\d+/',
+		'${1}' . intval($times),
+		$config_content
+	);
+	
+	// Write updated config
+	if (@file_put_contents($wp_config_path, $config_content) === false) {
+		// Restore backup on failure
+		@copy($backup_path, $wp_config_path);
+		@unlink($backup_path);
+		return array('success' => false, 'message' => 'Failed to write to wp-config.php');
+	}
+	
+	// Clean up old backups (keep last 5)
+	$backup_dir = dirname($wp_config_path);
+	$backups = glob($backup_dir . '/wp-config.php.aero-backup-*');
+	if (count($backups) > 5) {
+		usort($backups, function($a, $b) {
+			return filemtime($a) - filemtime($b);
+		});
+		for ($i = 0; $i < count($backups) - 5; $i++) {
+			@unlink($backups[$i]);
+		}
+	}
+	
+	return array('success' => true, 'message' => 'Batcache configuration updated successfully', 'backup' => $backup_path);
 }
 
 /**
