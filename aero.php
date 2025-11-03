@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.7.1
+Version: 1.7.2
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.7.1' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.7.2' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -241,8 +241,9 @@ function aero_admin_options() {
 				$batcache_max_age = isset( $_POST['aero_batcache_max_age'] ) ? intval($_POST['aero_batcache_max_age']) : 86400;
 				$batcache_seconds = isset( $_POST['aero_batcache_seconds'] ) ? intval($_POST['aero_batcache_seconds']) : 0;
 				$batcache_times = isset( $_POST['aero_batcache_times'] ) ? intval($_POST['aero_batcache_times']) : 1;
+				$batcache_noskip_cookies = isset( $_POST['aero_batcache_noskip_cookies'] ) ? sanitize_text_field($_POST['aero_batcache_noskip_cookies']) : '';
 				
-				$result = aero_update_batcache_config($batcache_max_age, $batcache_seconds, $batcache_times);
+				$result = aero_update_batcache_config($batcache_max_age, $batcache_seconds, $batcache_times, $batcache_noskip_cookies);
 				
 				if ($result['success']) {
 					echo '<div class="updated aero-notice"><p><strong>' . esc_html($result['message']) . '</strong></p></div>';
@@ -698,6 +699,26 @@ function aero_admin_options() {
 								<br><strong>Recommended:</strong> 1 (cache after first visit)
 							</div>
 						</div>
+						
+						<div class="aero-batcache-field">
+							<label for="aero_batcache_noskip_cookies">
+								<strong>Ignored Cookies (Advanced)</strong>
+							</label>
+							<input 
+								type="text" 
+								name="aero_batcache_noskip_cookies" 
+								id="aero_batcache_noskip_cookies" 
+								value="<?php echo esc_attr( $batcache_config['values']['noskip_cookies'] ?? 'wordpress_test_cookie, wp-wpml_current_language, wpml_browser_redirect_test' ); ?>"
+								class="aero-text-input"
+								placeholder="wordpress_test_cookie, wp-wpml_current_language, wpml_browser_redirect_test"
+								<?php echo !$batcache_config['writable'] && $batcache_config['exists'] ? 'disabled' : ''; ?>
+							/>
+							<div class="aero-setting-description">
+								Comma-separated list of cookie prefixes that should not prevent caching. Common plugins like WPML set cookies that would normally bypass cache. These cookies will be ignored, allowing pages to be cached even when they're present.
+								<br><strong>Default:</strong> wordpress_test_cookie, wp-wpml_current_language, wpml_browser_redirect_test
+								<br><strong>Note:</strong> Only add cookies you're certain should not affect page content.
+							</div>
+						</div>
 					</div>
 					
 					<?php if ( $batcache_config['exists'] && ( $batcache_config['writable'] || @is_writable( aero_get_wp_config_path() ) ) ) : ?>
@@ -1136,7 +1157,8 @@ function aero_check_batcache_config() {
 	$values = array(
 		'max_age' => null,
 		'seconds' => null,
-		'times' => null
+		'times' => null,
+		'noskip_cookies' => null
 	);
 	
 	if ($has_batcache_config) {
@@ -1149,6 +1171,15 @@ function aero_check_batcache_config() {
 		}
 		if (preg_match('/\$batcache(?:->|\[[\'"]+)times(?:[\'"]+\])?\s*=\s*(\d+)/', $config_content, $matches)) {
 			$values['times'] = intval($matches[1]);
+		}
+		// Extract noskip_cookies array
+		if (preg_match('/\$batcache(?:->|\[[\'"]+)noskip_cookies(?:[\'"]+\])?\s*=\s*array\s*\((.*?)\)/s', $config_content, $matches)) {
+			// Parse the array contents
+			$cookies_string = $matches[1];
+			preg_match_all('/[\'"]([^\'"]+)[\'"]/', $cookies_string, $cookie_matches);
+			if (!empty($cookie_matches[1])) {
+				$values['noskip_cookies'] = implode(', ', $cookie_matches[1]);
+			}
 		}
 	}
 	
@@ -1181,7 +1212,7 @@ function aero_get_wp_config_path() {
 /**
  * Add Batcache configuration to wp-config.php
  */
-function aero_add_batcache_config($max_age = 86400, $seconds = 0, $times = 1) {
+function aero_add_batcache_config($max_age = 86400, $seconds = 0, $times = 1, $noskip_cookies = '') {
 	$wp_config_path = aero_get_wp_config_path();
 	
 	if (!$wp_config_path || !file_exists($wp_config_path)) {
@@ -1212,6 +1243,24 @@ function aero_add_batcache_config($max_age = 86400, $seconds = 0, $times = 1) {
 		return array('success' => false, 'message' => 'Failed to create backup in ' . AERO_BACKUP_DIR);
 	}
 	
+	// Parse noskip_cookies string into array format
+	$cookies_array = '';
+	if (!empty(trim($noskip_cookies))) {
+		$cookies = array_map('trim', explode(',', $noskip_cookies));
+		$cookies = array_filter($cookies); // Remove empty values
+		if (!empty($cookies)) {
+			$cookies_formatted = array_map(function($cookie) {
+				return "'" . str_replace("'", "\\'", $cookie) . "'";
+			}, $cookies);
+			$cookies_array = implode(', ', $cookies_formatted);
+		}
+	}
+	
+	// Default cookies if none provided
+	if (empty($cookies_array)) {
+		$cookies_array = "'wordpress_test_cookie', 'wp-wpml_current_language', 'wpml_browser_redirect_test'";
+	}
+	
 	// Prepare Batcache configuration
 	$batcache_config = "\n//Batcache Customizations\n";
 	$batcache_config .= "global \$batcache;\n\n";
@@ -1220,10 +1269,12 @@ function aero_add_batcache_config($max_age = 86400, $seconds = 0, $times = 1) {
 	$batcache_config .= "    \$batcache->max_age = " . intval($max_age) . "; // Seconds the cached render of a page will be stored\n";
 	$batcache_config .= "    \$batcache->seconds = " . intval($seconds) . "; // Time number of visitors required to cache, 0 = instant\n";
 	$batcache_config .= "    \$batcache->times = " . intval($times) . "; // Number of visitors required to cache\n";
+	$batcache_config .= "    \$batcache->noskip_cookies = array( " . $cookies_array . " ); // Cookies that prevent caching\n";
 	$batcache_config .= "} elseif ( is_array( \$batcache ) ) {\n";
 	$batcache_config .= "    \$batcache['max_age'] = " . intval($max_age) . "; // Seconds the cached render of a page will be stored\n";
 	$batcache_config .= "    \$batcache['seconds'] = " . intval($seconds) . "; // Time number of visitors required to cache, 0 = instant\n";
 	$batcache_config .= "    \$batcache['times'] = " . intval($times) . "; // Number of visitors required to cache\n";
+	$batcache_config .= "    \$batcache['noskip_cookies'] = array( " . $cookies_array . " ); // Cookies that prevent caching\n";
 	$batcache_config .= "}\n";
 	$batcache_config .= "// End Batcache Customizations\n\n";
 	
@@ -1271,7 +1322,7 @@ function aero_add_batcache_config($max_age = 86400, $seconds = 0, $times = 1) {
 /**
  * Update Batcache configuration in wp-config.php
  */
-function aero_update_batcache_config($max_age, $seconds, $times) {
+function aero_update_batcache_config($max_age, $seconds, $times, $noskip_cookies = '') {
 	$wp_config_path = aero_get_wp_config_path();
 	
 	if (!$wp_config_path || !file_exists($wp_config_path)) {
@@ -1287,7 +1338,7 @@ function aero_update_batcache_config($max_age, $seconds, $times) {
 	// Check if config exists
 	if (strpos($config_content, 'Batcache Customizations') === false) {
 		// Config doesn't exist, add it
-		return aero_add_batcache_config($max_age, $seconds, $times);
+		return aero_add_batcache_config($max_age, $seconds, $times, $noskip_cookies);
 	}
 	
 	// Create backup directory if it doesn't exist
@@ -1303,7 +1354,7 @@ function aero_update_batcache_config($max_age, $seconds, $times) {
 		return array('success' => false, 'message' => 'Failed to create backup in ' . AERO_BACKUP_DIR);
 	}
 	
-	// Update values
+	// Update numeric values
 	$config_content = preg_replace(
 		'/(\$batcache(?:->|\[[\'"]+)max_age(?:[\'"]+\])?\s*=\s*)\d+/',
 		'${1}' . intval($max_age),
@@ -1317,6 +1368,31 @@ function aero_update_batcache_config($max_age, $seconds, $times) {
 	$config_content = preg_replace(
 		'/(\$batcache(?:->|\[[\'"]+)times(?:[\'"]+\])?\s*=\s*)\d+/',
 		'${1}' . intval($times),
+		$config_content
+	);
+	
+	// Parse noskip_cookies string into array format
+	$cookies_array = '';
+	if (!empty(trim($noskip_cookies))) {
+		$cookies = array_map('trim', explode(',', $noskip_cookies));
+		$cookies = array_filter($cookies); // Remove empty values
+		if (!empty($cookies)) {
+			$cookies_formatted = array_map(function($cookie) {
+				return "'" . str_replace("'", "\\'", $cookie) . "'";
+			}, $cookies);
+			$cookies_array = implode(', ', $cookies_formatted);
+		}
+	}
+	
+	// Default cookies if none provided
+	if (empty($cookies_array)) {
+		$cookies_array = "'wordpress_test_cookie', 'wp-wpml_current_language', 'wpml_browser_redirect_test'";
+	}
+	
+	// Update noskip_cookies array
+	$config_content = preg_replace(
+		'/(\$batcache(?:->|\[[\'"]+)noskip_cookies(?:[\'"]+\])?\s*=\s*)array\s*\(.*?\)\s*;/s',
+		'${1}array( ' . $cookies_array . ' );',
 		$config_content
 	);
 	

@@ -1,4 +1,4 @@
-/* Aero Dark Mode Styles - Complete with High Specificity */
+/* Aero Dark Mode Styles */
 
 /* Force black background everywhere */
 body.settings_page_aero,
@@ -711,6 +711,34 @@ body.settings_page_aero .aero-number-input:focus {
 body.settings_page_aero .aero-number-input:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
+}
+
+body.settings_page_aero .aero-text-input {
+	width: 100%;
+	background: #0a0a0a !important;
+	color: #e5e5e5 !important;
+	border: 1px solid #313131 !important;
+	border-radius: 0 !important;
+	padding: 10px 12px !important;
+	font-size: 14px !important;
+	transition: border-color 0.2s ease !important;
+	font-family: 'Courier New', Courier, monospace !important;
+}
+
+body.settings_page_aero .aero-text-input:focus {
+	outline: none !important;
+	border-color: #2e5aac !important;
+	background: #000 !important;
+}
+
+body.settings_page_aero .aero-text-input:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+body.settings_page_aero .aero-text-input::placeholder {
+	color: #666 !important;
+	opacity: 1 !important;
 }
 
 body.settings_page_aero .aero-batcache-notice {
