@@ -3,13 +3,13 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.7.0
+Version: 1.7.1
 Author: WP Stratos
 Author URI: https://wpstratos.com
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.7.0' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '1.7.1' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -22,6 +22,9 @@ if ( !defined ('AERO_CSS_CACHE_DIR' ) ) {
 }
 if ( !defined ('AERO_JS_CACHE_DIR' ) ) {
 	define( 'AERO_JS_CACHE_DIR', AERO_CACHE_DIR . 'js/' );
+}
+if ( !defined ('AERO_BACKUP_DIR' ) ) {
+	define( 'AERO_BACKUP_DIR', WP_CONTENT_DIR . '/aero-backups/' );
 }
 
 require_once( plugin_dir_path( __FILE__ ) . 'clear-minified-cache.php' );
@@ -36,6 +39,7 @@ require_once( AERO_MINIFY_LIBRARY_PATH . '/../path-converter/Converter.php' );
 if ( !file_exists( AERO_CACHE_DIR ) ) mkdir( AERO_CACHE_DIR, 0755, true );
 if ( !file_exists( AERO_CSS_CACHE_DIR ) ) mkdir( AERO_CSS_CACHE_DIR, 0755, true );
 if ( !file_exists( AERO_JS_CACHE_DIR ) ) mkdir( AERO_JS_CACHE_DIR, 0755, true );
+if ( !file_exists( AERO_BACKUP_DIR ) ) mkdir( AERO_BACKUP_DIR, 0755, true );
 
 add_action( 'admin_init', 'aero_add_stylesheet' );
 function aero_add_stylesheet() {
@@ -612,10 +616,9 @@ function aero_admin_options() {
 				<?php if ( !$batcache_config['exists'] ) : ?>
 					<div class="aero-batcache-notice" style="background: rgba(46, 90, 172, 0.08); border-left: 3px solid #2e5aac; padding: 15px; margin-bottom: 20px;">
 						<strong>Batcache Not Configured</strong><br>
-						Your site has all the requirements but Batcache hasn't been configured in wp-config.php yet. 
-						Click the button below to automatically add optimized Batcache settings.
+						Your site has all the requirements but Batcache hasn't been configured in wp-config.php yet. Click the button below to automatically add optimized Batcache settings.
 						<div style="margin-top: 15px;">
-							<button type="button" id="aero-batcache-auto-configure" class="button aero-button" style="display: none;">
+							<button type="button" id="aero-batcache-auto-configure" class="button aero-button">
 								Auto-Configure Batcache
 							</button>
 							<span id="aero-batcache-auto-status" style="margin-left: 10px; color: #999;"></span>
@@ -623,9 +626,9 @@ function aero_admin_options() {
 					</div>
 				<?php endif; ?>
 				
-				<?php if ( !$batcache_config['writable'] ) : ?>
+				<?php if ( !$batcache_config['writable'] && !$batcache_config['exists'] ) : ?>
 					<div class="aero-batcache-notice" style="background: rgba(220, 38, 38, 0.08); border-left: 3px solid #dc2626; padding: 15px; margin-bottom: 20px;">
-						<strong>⚠️ Warning:</strong> wp-config.php is not writable. You'll need to manually add the Batcache configuration or make the file writable.
+						<strong>⚠️ Warning:</strong> wp-config.php is not writable. Automatic configuration may fail. You may need to manually add the Batcache configuration or make the file temporarily writable.
 					</div>
 				<?php endif; ?>
 				
@@ -648,7 +651,7 @@ function aero_admin_options() {
 								min="0"
 								step="1"
 								class="aero-number-input"
-								<?php echo !$batcache_config['writable'] ? 'disabled' : ''; ?>
+								<?php echo !$batcache_config['writable'] && $batcache_config['exists'] ? 'disabled' : ''; ?>
 							/>
 							<div class="aero-setting-description">
 								How long (in seconds) to store cached pages. Default: 86400 (24 hours).
@@ -668,7 +671,7 @@ function aero_admin_options() {
 								min="0"
 								step="1"
 								class="aero-number-input"
-								<?php echo !$batcache_config['writable'] ? 'disabled' : ''; ?>
+								<?php echo !$batcache_config['writable'] && $batcache_config['exists'] ? 'disabled' : ''; ?>
 							/>
 							<div class="aero-setting-description">
 								How long to wait before caching. Set to 0 for instant caching. Default: 0.
@@ -688,7 +691,7 @@ function aero_admin_options() {
 								min="1"
 								step="1"
 								class="aero-number-input"
-								<?php echo !$batcache_config['writable'] ? 'disabled' : ''; ?>
+								<?php echo !$batcache_config['writable'] && $batcache_config['exists'] ? 'disabled' : ''; ?>
 							/>
 							<div class="aero-setting-description">
 								Number of visitors required before a page is cached. Default: 1.
@@ -697,13 +700,13 @@ function aero_admin_options() {
 						</div>
 					</div>
 					
-					<?php if ( $batcache_config['writable'] && $batcache_config['exists'] ) : ?>
+					<?php if ( $batcache_config['exists'] && ( $batcache_config['writable'] || @is_writable( aero_get_wp_config_path() ) ) ) : ?>
 					<div style="margin-top: 20px;">
 						<button type="submit" name="aero_save_batcache" class="button button-primary aero-button">
 							Update Batcache Settings
 						</button>
 						<span style="color: #999; font-size: 13px; margin-left: 10px;">
-							A backup of wp-config.php will be created automatically
+							A backup will be created in wp-content/aero-backups/
 						</span>
 					</div>
 					<?php endif; ?>
@@ -980,6 +983,9 @@ function aero_generate_debug_info() {
 		$debug_info .= "Visitor Threshold (times): " . ($batcache_config['values']['times'] ?? 'Not set') . "\n";
 	}
 	$debug_info .= "Can Configure: " . (aero_can_configure_batcache() ? 'Yes' : 'No') . "\n";
+	$debug_info .= "Backup Directory: " . AERO_BACKUP_DIR . "\n";
+	$debug_info .= "Backup Dir Exists: " . (file_exists(AERO_BACKUP_DIR) ? 'Yes' : 'No') . "\n";
+	$debug_info .= "Backup Dir Writable: " . (is_writable(AERO_BACKUP_DIR) ? 'Yes' : 'No') . "\n";
 	$debug_info .= "\n";
 	
 	// Active Plugins
@@ -1193,10 +1199,17 @@ function aero_add_batcache_config($max_age = 86400, $seconds = 0, $times = 1) {
 		return array('success' => false, 'message' => 'Batcache configuration already exists');
 	}
 	
-	// Create backup
-	$backup_path = $wp_config_path . '.aero-backup-' . date('Y-m-d-His');
+	// Create backup directory if it doesn't exist
+	if (!file_exists(AERO_BACKUP_DIR)) {
+		@mkdir(AERO_BACKUP_DIR, 0755, true);
+	}
+	
+	// Create backup in wp-content/aero-backups/
+	$backup_filename = 'wp-config-backup-' . date('Y-m-d-His') . '.php';
+	$backup_path = AERO_BACKUP_DIR . $backup_filename;
+	
 	if (!@copy($wp_config_path, $backup_path)) {
-		return array('success' => false, 'message' => 'Failed to create backup');
+		return array('success' => false, 'message' => 'Failed to create backup in ' . AERO_BACKUP_DIR);
 	}
 	
 	// Prepare Batcache configuration
@@ -1252,7 +1265,7 @@ function aero_add_batcache_config($max_age = 86400, $seconds = 0, $times = 1) {
 		return array('success' => false, 'message' => 'Failed to write to wp-config.php');
 	}
 	
-	return array('success' => true, 'message' => 'Batcache configuration added successfully', 'backup' => $backup_path);
+	return array('success' => true, 'message' => 'Batcache configuration added successfully', 'backup' => $backup_filename);
 }
 
 /**
@@ -1277,10 +1290,17 @@ function aero_update_batcache_config($max_age, $seconds, $times) {
 		return aero_add_batcache_config($max_age, $seconds, $times);
 	}
 	
-	// Create backup
-	$backup_path = $wp_config_path . '.aero-backup-' . date('Y-m-d-His');
+	// Create backup directory if it doesn't exist
+	if (!file_exists(AERO_BACKUP_DIR)) {
+		@mkdir(AERO_BACKUP_DIR, 0755, true);
+	}
+	
+	// Create backup in wp-content/aero-backups/
+	$backup_filename = 'wp-config-backup-' . date('Y-m-d-His') . '.php';
+	$backup_path = AERO_BACKUP_DIR . $backup_filename;
+	
 	if (!@copy($wp_config_path, $backup_path)) {
-		return array('success' => false, 'message' => 'Failed to create backup');
+		return array('success' => false, 'message' => 'Failed to create backup in ' . AERO_BACKUP_DIR);
 	}
 	
 	// Update values
@@ -1309,8 +1329,7 @@ function aero_update_batcache_config($max_age, $seconds, $times) {
 	}
 	
 	// Clean up old backups (keep last 5)
-	$backup_dir = dirname($wp_config_path);
-	$backups = glob($backup_dir . '/wp-config.php.aero-backup-*');
+	$backups = glob(AERO_BACKUP_DIR . 'wp-config-backup-*.php');
 	if (count($backups) > 5) {
 		usort($backups, function($a, $b) {
 			return filemtime($a) - filemtime($b);
@@ -1320,7 +1339,7 @@ function aero_update_batcache_config($max_age, $seconds, $times) {
 		}
 	}
 	
-	return array('success' => true, 'message' => 'Batcache configuration updated successfully', 'backup' => $backup_path);
+	return array('success' => true, 'message' => 'Batcache configuration updated successfully', 'backup' => $backup_filename);
 }
 
 /**
@@ -1397,6 +1416,15 @@ function aero_check_plugin_update() {
 	$saved_version = get_option('aero_plugin_version' );
 	if ( version_compare( $saved_version, AERO_PLUGIN_VERSION_NUM, '<' ) || $saved_version === FALSE ) {
 		update_option( 'aero_plugin_version', AERO_PLUGIN_VERSION_NUM );
+		
+		// Try to auto-configure Batcache on plugin update if requirements are met
+		if ( aero_can_configure_batcache() ) {
+			$batcache_config = aero_check_batcache_config();
+			if ( !$batcache_config['exists'] ) {
+				// Silently attempt to configure Batcache
+				aero_add_batcache_config();
+			}
+		}
 	}
 }
 add_action( 'admin_init', 'aero_check_plugin_update' );
@@ -1410,6 +1438,15 @@ function aero_activate_plugin() {
 	update_option( 'aero_preload_critical', 'on' );
 	update_option( 'aero_guest_mode_level', 'off' );
 	update_option( 'aero_debug_mode', 'off' );
+	
+	// Try to auto-configure Batcache on plugin activation if requirements are met
+	if ( aero_can_configure_batcache() ) {
+		$batcache_config = aero_check_batcache_config();
+		if ( !$batcache_config['exists'] ) {
+			// Silently attempt to configure Batcache
+			aero_add_batcache_config();
+		}
+	}
 }
 register_activation_hook( __FILE__, 'aero_activate_plugin' );
 
