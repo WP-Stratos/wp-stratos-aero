@@ -1662,11 +1662,11 @@ function aero_minify_html( $buffer ) {
 	$final = strlen( $buffer );
 	$savings = ($initial > 0) ? round((($initial - $final) / $initial * 100), 3) : 0;
 
+	// Append comment directly to buffer to ensure it's always present
 	if ( $savings > 0 ) {
-		global $aero_minify_comment;
 		$guest_mode_level = aero_get_guest_mode_level();
 		$mode = $guest_mode_level ? ' [Guest Mode: ' . ucfirst($guest_mode_level) . ']' : '';
-		$aero_minify_comment = PHP_EOL . '<!-- Optimized by Aero v' . AERO_PLUGIN_VERSION_NUM . $mode . ' | Saved: ' . $savings . '% | https://wpstratos.com -->';
+		$buffer .= PHP_EOL . '<!-- Optimized by Aero v' . AERO_PLUGIN_VERSION_NUM . $mode . ' | Saved: ' . $savings . '% | https://wpstratos.com -->';
 	}
 
 	return $buffer;
@@ -2128,14 +2128,6 @@ function aero_html_minify_end() {
 	}
 }
 add_action( 'shutdown', 'aero_html_minify_end', 9999 );
-
-function aero_print_minify_comment() {
-	global $aero_minify_comment;
-	if (!empty($aero_minify_comment)) {
-		echo $aero_minify_comment;
-	}
-}
-add_action( 'shutdown', 'aero_print_minify_comment', 10000 );
 
 add_action( 'admin_bar_menu', 'aero_admin_bar_menu', 100 );
 function aero_admin_bar_menu( $wp_admin_bar ) {
