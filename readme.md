@@ -57,4 +57,4 @@ Visit [WP Stratos](https://wpstratos.com) for general support, or the [Aero docu
 ## Credits
 Developed by [WP Stratos](https://wpstratos.com).
 
-Built with minification libraries by Steve Clay and Matthias Mullie.
+Built with minification libraries by Steve Clay and Matthias Mullie. Neither library is actively maintained anymore, but the work still holds up, and we're glad to build on it.
