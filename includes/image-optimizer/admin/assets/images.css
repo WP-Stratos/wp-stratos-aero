@@ -1,0 +1,252 @@
+/* ==========================================================================
+   Aero — Images screen  |  WP Postman design language extensions
+   The statistics band reuses the shell's aero-stats-band / aero-donut /
+   aero-stat-tiles components verbatim; this file adds only the module's
+   segment colors, progress panels, chips and log styling.
+   ========================================================================== */
+
+/* ── Stats band: module segment colors ────────────────────────── */
+#aero-root .aero-io-donut-webp { stroke: var(--acc); }
+#aero-root .aero-io-donut-avif { stroke: #59d499; }
+#aero-root .aero-legend-swatch.aero-io-sw-webp { background: var(--acc); }
+#aero-root .aero-legend-swatch.aero-io-sw-avif { background: #59d499; }
+
+#aero-root .aero-io-ok   { color: var(--ok) !important; }
+#aero-root .aero-io-warn { color: var(--warn) !important; }
+#aero-root .aero-io-err  { color: var(--err) !important; }
+
+/* ── Progress panels (bulk + custom folders) ──────────────────── */
+#aero-root .aero-io-panel {
+    background: var(--s2);
+    border: 1px solid var(--b);
+    padding: 18px 20px 20px;
+}
+
+#aero-root .aero-io-progress-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+#aero-root .aero-io-progress-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--t2);
+}
+
+#aero-root .aero-io-progress-pct {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--acc);
+}
+
+#aero-root .aero-io-progress { margin-bottom: 10px; }
+
+#aero-root .aero-io-progress-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 11.5px;
+    color: var(--t3);
+    min-height: 18px;
+    line-height: 1.5;
+}
+#aero-root .aero-io-progress-meta span:last-child {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--t4);
+}
+
+#aero-root .aero-io-counts {
+    display: flex;
+    gap: 22px;
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--t3);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+}
+#aero-root .aero-io-counts strong {
+    color: var(--text);
+    font-family: var(--mono);
+    margin-left: 4px;
+}
+
+/* ── Live log / log viewer / nginx snippet ────────────────────── */
+#aero-root .aero-io-log {
+    margin: 14px 0 0;
+    padding: 12px 14px;
+    max-height: 260px;
+    overflow: auto;
+    background: #0a0a0a;
+    border: 1px solid var(--b);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--t3);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ── Skip-size chips ──────────────────────────────────────────── */
+#aero-root .aero-io-size-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#aero-root .aero-io-size-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px;
+    background: #111;
+    border: 1px solid var(--b2);
+    cursor: pointer;
+    font-size: 11.5px;
+    color: var(--t2);
+    font-family: var(--mono);
+    transition: border-color .15s, color .15s;
+    margin: 0;
+}
+#aero-root .aero-io-size-chip:hover { border-color: var(--t3); color: var(--text); }
+#aero-root .aero-io-size-chip input[type="checkbox"] {
+    width: 13px; height: 13px;
+    margin: 0;
+    accent-color: var(--acc);
+    cursor: pointer;
+}
+#aero-root .aero-io-size-chip:has(input:checked) {
+    border-color: var(--acc);
+    color: var(--text);
+}
+
+/* ── Delivery test result + advanced details ──────────────────── */
+#aero-root .aero-io-test-result {
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+#aero-root .aero-io-details { margin-top: 16px; }
+#aero-root .aero-io-details summary {
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--t3);
+    padding: 8px 0;
+    user-select: none;
+}
+#aero-root .aero-io-details summary:hover { color: var(--text); }
+#aero-root .aero-io-details[open] summary { color: var(--t2); }
+
+/* ── Custom folders / logs tables ─────────────────────────────── */
+#aero-root .aero-io-addbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+#aero-root .aero-io-addbar .aero-input { flex: 1; }
+
+#aero-root .aero-io-custom-table code,
+#aero-root #aero-io-logs-table code {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #7ecfff;
+    background: transparent;
+    padding: 0;
+}
+
+#aero-root .aero-io-log-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+#aero-root .aero-io-empty {
+    font-size: 11.5px;
+    color: var(--t4);
+}
+
+/* ── Master switch ────────────────────────────────────────────── */
+#aero-root .aero-io-master {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 18px 20px;
+    background: var(--s2);
+    border: 1px solid var(--b);
+}
+#aero-root .aero-io-master.is-off { border-color: rgba(251,191,36,.35); }
+
+#aero-root .aero-io-switch {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    margin: 2px 0 0;
+    cursor: pointer;
+}
+#aero-root .aero-io-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+#aero-root .aero-io-switch-track {
+    display: block;
+    width: 42px;
+    height: 22px;
+    background: #2a2a2a;
+    border: 1px solid var(--b2);
+    border-radius: 999px;
+    transition: background .18s, border-color .18s;
+}
+#aero-root .aero-io-switch-thumb {
+    display: block;
+    width: 16px;
+    height: 16px;
+    margin: 2px;
+    border-radius: 50%;
+    background: var(--t3);
+    transition: transform .18s, background .18s;
+}
+#aero-root .aero-io-switch input:checked + .aero-io-switch-track {
+    background: rgba(74,128,240,.25);
+    border-color: var(--acc);
+}
+#aero-root .aero-io-switch input:checked + .aero-io-switch-track .aero-io-switch-thumb {
+    transform: translateX(20px);
+    background: var(--acc);
+}
+#aero-root .aero-io-switch input:focus-visible + .aero-io-switch-track {
+    outline: 2px solid var(--acc);
+    outline-offset: 2px;
+}
+#aero-root .aero-io-switch input:disabled + .aero-io-switch-track { opacity: .5; }
+
+#aero-root .aero-io-master-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+#aero-root .aero-io-master.is-off .aero-io-master-title { color: var(--warn); }
+#aero-root .aero-io-master-sub {
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--t3);
+    max-width: 76ch;
+}
+
+/* ── Completed bulk panel ─────────────────────────────────────── */
+#aero-root .aero-io-panel.is-complete { border-color: rgba(52,211,153,.35); }
+#aero-root .aero-io-panel.is-complete .aero-progress-fill { background: var(--ok); }
+#aero-root .aero-io-panel.is-complete .aero-io-progress-pct { color: var(--ok); }
+#aero-root .aero-io-panel.is-complete .aero-io-progress-title { color: var(--ok); }
+
+/* ── Conflict notice (wp-admin wide) ──────────────────────────── */
+.aero-io-conflict-notice p { max-width: 90ch; }

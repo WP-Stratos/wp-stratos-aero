@@ -1,0 +1,84 @@
+/* ==========================================================================
+   Aero — media library integration (light WP-admin context)
+   Native WordPress look with the Aero accent, no dark shell here.
+   ========================================================================== */
+
+.cx-media-item ul,
+.cx-media-attachment ul,
+.misc-pub-cx ul {
+    margin: 4px 0 0;
+}
+
+.cx-media-item li,
+.cx-media-attachment li,
+.misc-pub-cx li {
+    margin: 0 0 3px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #50575e;
+}
+
+.cx-media-item li strong,
+.cx-media-attachment li strong,
+.misc-pub-cx li strong {
+    color: #1d2327;
+}
+
+.cx-media-selected {
+    max-width: 130px;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+a.cx-media.button,
+a.cx-media-delete.button {
+    vertical-align: middle;
+}
+
+a.cx-media.button:not(.button-disabled) {
+    border-color: #4a80f0;
+    color: #4a80f0;
+}
+a.cx-media.button:not(.button-disabled):hover {
+    background: #4a80f0;
+    color: #fff;
+}
+
+.misc-pub-cx h4,
+.cx-media-attachment h4 {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #646970;
+}
+
+/* Column width in list mode */
+.fixed .column-aero { width: 220px; }
+@media screen and (max-width: 1100px) {
+    .fixed .column-aero { width: 170px; }
+}
+
+/* Replace Media box */
+.aero-io-replace-box {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #dcdcde;
+}
+.aero-io-replace-box .aero-io-replace-label {
+    display: inline-block;
+    margin-bottom: 6px;
+}
+#aero-io-replace-name {
+    display: inline-block;
+    margin: 0 8px 6px 0;
+    font-size: 11px;
+    color: #646970;
+    word-break: break-all;
+}
+#aero-io-replace-status {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+}

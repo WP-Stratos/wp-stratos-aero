@@ -1,15 +1,15 @@
 /* Aero Dark Mode Styles */
 
 /* Force black background everywhere */
-body.settings_page_aero,
-body.settings_page_aero #wpbody,
-body.settings_page_aero #wpcontent,
-body.settings_page_aero #wpbody-content {
+body.aero-admin-page,
+body.aero-admin-page #wpbody,
+body.aero-admin-page #wpcontent,
+body.aero-admin-page #wpbody-content {
 	background: #000 !important;
 }
 
 /* Main wrapper */
-body.settings_page_aero .aero-wrap {
+body.aero-admin-page .aero-wrap {
 	background: #000 !important;
 	color: #e5e5e5 !important;
 	margin-left: 0;
@@ -19,7 +19,7 @@ body.settings_page_aero .aero-wrap {
 }
 
 /* Grid layout */
-body.settings_page_aero .aero-main-grid {
+body.aero-admin-page .aero-main-grid {
 	display: grid;
 	grid-template-columns: 1fr 350px;
 	gap: 20px;
@@ -27,25 +27,25 @@ body.settings_page_aero .aero-main-grid {
 }
 
 @media (max-width: 1024px) {
-	body.settings_page_aero .aero-main-grid {
+	body.aero-admin-page .aero-main-grid {
 		grid-template-columns: 1fr;
 	}
 }
 
 /* Main container */
-body.settings_page_aero .aero-container {
+body.aero-admin-page .aero-container {
 	background: #171717 !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 30px;
 	color: #e5e5e5 !important;
 }
 
 /* Sidebar */
-body.settings_page_aero .aero-sidebar {
+body.aero-admin-page .aero-sidebar {
 	background: #171717 !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 20px;
 	color: #e5e5e5 !important;
 	height: fit-content;
@@ -54,12 +54,12 @@ body.settings_page_aero .aero-sidebar {
 }
 
 @media (max-width: 1024px) {
-	body.settings_page_aero .aero-sidebar {
+	body.aero-admin-page .aero-sidebar {
 		position: static;
 	}
 }
 
-body.settings_page_aero .aero-sidebar h3 {
+body.aero-admin-page .aero-sidebar h3 {
 	margin-top: 0;
 	color: #e5e5e5 !important;
 	font-size: 16px;
@@ -69,7 +69,7 @@ body.settings_page_aero .aero-sidebar h3 {
 	margin-bottom: 15px;
 }
 
-body.settings_page_aero .aero-stat-item {
+body.aero-admin-page .aero-stat-item {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -77,30 +77,30 @@ body.settings_page_aero .aero-stat-item {
 	border-bottom: 1px solid #2a2a2a;
 }
 
-body.settings_page_aero .aero-stat-item:last-child {
+body.aero-admin-page .aero-stat-item:last-child {
 	border-bottom: none;
 }
 
-body.settings_page_aero .aero-stat-label {
+body.aero-admin-page .aero-stat-label {
 	color: #999 !important;
 	font-size: 13px;
 }
 
-body.settings_page_aero .aero-stat-value {
-	color: #2e5aac !important;
+body.aero-admin-page .aero-stat-value {
+	color: #4a80f0 !important;
 	font-weight: 600;
 	font-size: 16px;
 	min-width: 60px;
 	text-align: right;
 }
 
-body.settings_page_aero .aero-stat-value .aero-loading-dots {
+body.aero-admin-page .aero-stat-value .aero-loading-dots {
 	color: #999 !important;
 	font-size: 14px;
 	font-weight: 400;
 }
 
-body.settings_page_aero .aero-container h2 {
+body.aero-admin-page .aero-container h2 {
 	color: #e5e5e5 !important;
 	margin-top: 0;
 	display: flex;
@@ -108,107 +108,107 @@ body.settings_page_aero .aero-container h2 {
 	gap: 10px;
 }
 
-body.settings_page_aero .aero_settings {
+body.aero-admin-page .aero_settings {
 	font-size: 16px !important;
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-container label {
+body.aero-admin-page .aero-container label {
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-container p {
+body.aero-admin-page .aero-container p {
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-container input[type="checkbox"] {
+body.aero-admin-page .aero-container input[type="checkbox"] {
 	background: #000 !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	margin-right: 8px;
 	cursor: pointer;
 }
 
-body.settings_page_aero .aero-container input[type="radio"] {
+body.aero-admin-page .aero-container input[type="radio"] {
 	background: #000 !important;
 	border: 1px solid #313131 !important;
 	cursor: pointer;
 }
 
-body.settings_page_aero .aero-button {
-	background: #2e5aac !important;
+body.aero-admin-page .aero-button {
+	background: #4a80f0 !important;
 	border: none !important;
 	color: #fff !important;
 	padding: 10px 18px !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	cursor: pointer !important;
 	font-weight: 600 !important;
 	transition: background 0.2s ease !important;
 	font-size: 14px !important;
 }
 
-body.settings_page_aero .aero-button:hover {
+body.aero-admin-page .aero-button:hover {
 	background: #244a8f !important;
 	color: #fff !important;
 }
 
-body.settings_page_aero .aero-button-secondary {
+body.aero-admin-page .aero-button-secondary {
 	background: #3a3a3a !important;
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-button-secondary:hover {
+body.aero-admin-page .aero-button-secondary:hover {
 	background: #4a4a4a !important;
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-notice {
+body.aero-admin-page .aero-notice {
 	background: #171717 !important;
-	border-left: 4px solid #2e5aac !important;
+	border-left: 4px solid #4a80f0 !important;
 	color: #e5e5e5 !important;
 	padding: 12px !important;
 	margin: 15px 0 !important;
 }
 
-body.settings_page_aero .aero-notice p {
+body.aero-admin-page .aero-notice p {
 	margin: 0.5em 0 !important;
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-container a {
-	color: #2e5aac !important;
+body.aero-admin-page .aero-container a {
+	color: #4a80f0 !important;
 	text-decoration: none;
 }
 
-body.settings_page_aero .aero-container a:hover {
+body.aero-admin-page .aero-container a:hover {
 	color: #5080d0 !important;
 	text-decoration: underline;
 }
 
-body.settings_page_aero .aero-container hr {
+body.aero-admin-page .aero-container hr {
 	border: 0;
 	border-top: 1px solid #313131;
 	margin: 20px 0;
 }
 
-body.settings_page_aero .aero-wrap .wrap {
+body.aero-admin-page .aero-wrap .wrap {
 	background: transparent !important;
 }
 
-body.settings_page_aero .aero-container .button-primary {
+body.aero-admin-page .aero-container .button-primary {
 	box-shadow: none !important;
 	text-shadow: none !important;
 }
 
 /* Accordion styles */
-body.settings_page_aero .aero-accordion {
+body.aero-admin-page .aero-accordion {
 	background: #171717 !important;
 	border: 1px solid #313131 !important;
 	margin: 20px 0;
-	border-radius: 0 !important;
+	border-radius: 0;
 }
 
-body.settings_page_aero .aero-accordion-header {
+body.aero-admin-page .aero-accordion-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -222,52 +222,52 @@ body.settings_page_aero .aero-accordion-header {
 	font-weight: 600;
 	font-size: 15px;
 	transition: background 0.2s ease;
-	border-radius: 0 !important;
+	border-radius: 0;
 }
 
-body.settings_page_aero .aero-accordion-header:hover {
+body.aero-admin-page .aero-accordion-header:hover {
 	background: #252525 !important;
 }
 
-body.settings_page_aero .aero-accordion-icon {
+body.aero-admin-page .aero-accordion-icon {
 	transition: transform 0.2s ease;
-	color: #2e5aac !important;
+	color: #4a80f0 !important;
 	font-size: 20px;
 	line-height: 1;
 }
 
-body.settings_page_aero .aero-accordion-header.active .aero-accordion-icon {
+body.aero-admin-page .aero-accordion-header.active .aero-accordion-icon {
 	transform: rotate(180deg);
 }
 
-body.settings_page_aero .aero-accordion-content {
+body.aero-admin-page .aero-accordion-content {
 	max-height: 0;
 	overflow: hidden;
 	transition: max-height 0.3s ease;
 	background: #171717 !important;
 }
 
-body.settings_page_aero .aero-accordion-content.active {
+body.aero-admin-page .aero-accordion-content.active {
 	max-height: 1000px;
 	border-top: 1px solid #313131;
 }
 
-body.settings_page_aero .aero-accordion-inner {
+body.aero-admin-page .aero-accordion-inner {
 	padding: 20px;
 }
 
-body.settings_page_aero .aero-setting-group {
+body.aero-admin-page .aero-setting-group {
 	margin-bottom: 20px;
 }
 
-body.settings_page_aero .aero-setting-group label {
+body.aero-admin-page .aero-setting-group label {
 	display: block;
 	margin-bottom: 8px;
 	color: #e5e5e5 !important;
 	font-weight: 500;
 }
 
-body.settings_page_aero .aero-setting-description {
+body.aero-admin-page .aero-setting-description {
 	color: #999 !important;
 	font-size: 13px;
 	margin-top: 5px;
@@ -275,20 +275,20 @@ body.settings_page_aero .aero-setting-description {
 }
 
 /* Debug box styles */
-body.settings_page_aero .aero-debug-box {
+body.aero-admin-page .aero-debug-box {
 	background: #0a0a0a !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 15px;
 }
 
-body.settings_page_aero .aero-debug-box textarea {
+body.aero-admin-page .aero-debug-box textarea {
 	width: 100% !important;
 	height: 300px !important;
 	background: #0a0a0a !important;
 	color: #0f0 !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 10px !important;
 	font-family: 'Courier New', Courier, monospace !important;
 	font-size: 12px !important;
@@ -297,76 +297,76 @@ body.settings_page_aero .aero-debug-box textarea {
 	box-sizing: border-box !important;
 }
 
-body.settings_page_aero .aero-debug-box textarea:focus {
+body.aero-admin-page .aero-debug-box textarea:focus {
 	outline: none !important;
-	border-color: #2e5aac !important;
+	border-color: #4a80f0 !important;
 }
 
-body.settings_page_aero .aero-debug-box .button-small {
-	background: #2e5aac !important;
+body.aero-admin-page .aero-debug-box .button-small {
+	background: #4a80f0 !important;
 	color: #fff !important;
 	border: none !important;
 	padding: 5px 12px !important;
 	cursor: pointer !important;
 	font-size: 13px !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	transition: background 0.2s ease !important;
 }
 
-body.settings_page_aero .aero-debug-box .button-small:hover {
+body.aero-admin-page .aero-debug-box .button-small:hover {
 	background: #244a8f !important;
 }
 
 /* Guest Mode Radio Options */
-body.settings_page_aero .aero-radio-cards {
+body.aero-admin-page .aero-radio-cards {
 	display: grid;
 	gap: 12px;
 	margin-top: 15px;
 }
 
-body.settings_page_aero .aero-radio-card {
+body.aero-admin-page .aero-radio-card {
 	position: relative;
 	background: rgba(255, 255, 255, 0.03) !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 16px 20px !important;
 	cursor: pointer;
 	transition: all 0.2s ease;
 }
 
-body.settings_page_aero .aero-radio-card:hover {
+body.aero-admin-page .aero-radio-card:hover {
 	background: rgba(255, 255, 255, 0.05) !important;
 	border-color: #4a4a4a !important;
 }
 
-body.settings_page_aero .aero-radio-card.selected {
-	background: rgba(46, 90, 172, 0.08) !important;
-	border-color: #2e5aac !important;
+body.aero-admin-page .aero-radio-card.selected {
+	background: rgba(74, 128, 240, 0.08) !important;
+	border-color: #4a80f0 !important;
 }
 
-body.settings_page_aero .aero-radio-card.selected:hover {
-	background: rgba(46, 90, 172, 0.12) !important;
+body.aero-admin-page .aero-radio-card.selected:hover {
+	background: rgba(74, 128, 240, 0.12) !important;
 }
 
-body.settings_page_aero .aero-radio-card-header {
+body.aero-admin-page .aero-radio-card-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	margin-bottom: 8px;
 }
 
-body.settings_page_aero .aero-radio-card-title {
+body.aero-admin-page .aero-radio-card-title {
 	font-size: 15px;
 	font-weight: 600;
 	color: #e5e5e5 !important;
 	margin: 0;
 }
 
-body.settings_page_aero .aero-radio-card.selected .aero-radio-card-title {
-	color: #2e5aac !important;
+body.aero-admin-page .aero-radio-card.selected .aero-radio-card-title {
+	color: #4a80f0 !important;
 }
 
-body.settings_page_aero .aero-radio-card-description {
+body.aero-admin-page .aero-radio-card-description {
 	font-size: 13px;
 	color: #999 !important;
 	line-height: 1.5;
@@ -374,14 +374,14 @@ body.settings_page_aero .aero-radio-card-description {
 }
 
 /* Custom Radio Button */
-body.settings_page_aero .aero-radio-card input[type="radio"] {
+body.aero-admin-page .aero-radio-card input[type="radio"] {
 	appearance: none;
 	-webkit-appearance: none;
 	-moz-appearance: none;
 	width: 20px;
 	height: 20px;
 	border: 2px solid #313131 !important;
-	border-radius: 50% !important;
+	border-radius: 0;
 	background: #000 !important;
 	cursor: pointer;
 	position: relative;
@@ -390,16 +390,16 @@ body.settings_page_aero .aero-radio-card input[type="radio"] {
 	transition: all 0.2s ease;
 }
 
-body.settings_page_aero .aero-radio-card:hover input[type="radio"] {
+body.aero-admin-page .aero-radio-card:hover input[type="radio"] {
 	border-color: #4a4a4a !important;
 }
 
-body.settings_page_aero .aero-radio-card input[type="radio"]:checked {
-	border-color: #2e5aac !important;
-	background: #2e5aac !important;
+body.aero-admin-page .aero-radio-card input[type="radio"]:checked {
+	border-color: #4a80f0 !important;
+	background: #4a80f0 !important;
 }
 
-body.settings_page_aero .aero-radio-card input[type="radio"]:checked::before {
+body.aero-admin-page .aero-radio-card input[type="radio"]:checked::before {
 	content: '';
 	position: absolute;
 	top: 50%;
@@ -407,37 +407,37 @@ body.settings_page_aero .aero-radio-card input[type="radio"]:checked::before {
 	transform: translate(-85%, -85%);
 	width: 8px;
 	height: 8px;
-	border-radius: 50%;
+	border-radius: 0;
 	background: #fff;
 }
 
 /* Special styling for warning option (Extreme) */
-body.settings_page_aero .aero-radio-card.warning .aero-radio-card-title {
+body.aero-admin-page .aero-radio-card.warning .aero-radio-card-title {
 	color: #ff9800 !important;
 }
 
-body.settings_page_aero .aero-radio-card.warning.selected {
+body.aero-admin-page .aero-radio-card.warning.selected {
 	background: rgba(255, 152, 0, 0.08) !important;
 	border-color: #ff9800 !important;
 }
 
-body.settings_page_aero .aero-radio-card.warning.selected:hover {
+body.aero-admin-page .aero-radio-card.warning.selected:hover {
 	background: rgba(255, 152, 0, 0.12) !important;
 }
 
-body.settings_page_aero .aero-radio-card.warning input[type="radio"]:checked {
+body.aero-admin-page .aero-radio-card.warning input[type="radio"]:checked {
 	border-color: #ff9800 !important;
 	background: #ff9800 !important;
 }
 
 /* Advanced CSS Injection Textarea */
-body.settings_page_aero .aero-css-textarea {
+body.aero-admin-page .aero-css-textarea {
 	width: 100% !important;
 	min-height: 200px !important;
 	background: #0a0a0a !important;
 	color: #e5e5e5 !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 12px !important;
 	font-family: 'Courier New', Courier, monospace !important;
 	font-size: 13px !important;
@@ -447,28 +447,28 @@ body.settings_page_aero .aero-css-textarea {
 	transition: border-color 0.2s ease !important;
 }
 
-body.settings_page_aero .aero-css-textarea:focus {
+body.aero-admin-page .aero-css-textarea:focus {
 	outline: none !important;
-	border-color: #2e5aac !important;
+	border-color: #4a80f0 !important;
 	background: #000 !important;
 }
 
-body.settings_page_aero .aero-css-textarea::placeholder {
+body.aero-admin-page .aero-css-textarea::placeholder {
 	color: #666 !important;
 	opacity: 1 !important;
 }
 
-body.settings_page_aero .aero-setting-group code {
+body.aero-admin-page .aero-setting-group code {
 	background: #0a0a0a !important;
-	color: #2e5aac !important;
+	color: #4a80f0 !important;
 	padding: 2px 6px !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	font-family: 'Courier New', Courier, monospace !important;
 	font-size: 12px !important;
 }
 
 /* Footer */
-body.settings_page_aero .aero-footer {
+body.aero-admin-page .aero-footer {
 	margin-top: 30px;
 	padding-top: 20px;
 	border-top: 1px solid #313131;
@@ -476,8 +476,8 @@ body.settings_page_aero .aero-footer {
 	font-size: 13px;
 }
 
-body.settings_page_aero .aero-footer a {
-	color: #2e5aac !important;
+body.aero-admin-page .aero-footer a {
+	color: #4a80f0 !important;
 }
 
 /* Toolbar styles */
@@ -497,19 +497,19 @@ body.settings_page_aero .aero-footer a {
 }
 
 /* Diagnostics Container */
-body.settings_page_aero .aero-diagnostics-container {
+body.aero-admin-page .aero-diagnostics-container {
 	background: #171717 !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 20px;
 	margin-bottom: 30px;
 }
 
-body.settings_page_aero .aero-diagnostics-container.aero-not-wpstratos {
+body.aero-admin-page .aero-diagnostics-container.aero-not-wpstratos {
 	border-color: #ff9800 !important;
 }
 
-body.settings_page_aero .aero-diagnostics-header {
+body.aero-admin-page .aero-diagnostics-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -518,130 +518,130 @@ body.settings_page_aero .aero-diagnostics-header {
 	border-bottom: 1px solid #313131;
 }
 
-body.settings_page_aero .aero-diagnostics-title {
+body.aero-admin-page .aero-diagnostics-title {
 	font-size: 16px;
 	font-weight: 600;
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-diagnostics-score {
+body.aero-admin-page .aero-diagnostics-score {
 	font-size: 14px;
-	color: #2e5aac !important;
+	color: #4a80f0 !important;
 	font-weight: 600;
 }
 
-body.settings_page_aero .aero-diagnostics-list {
+body.aero-admin-page .aero-diagnostics-list {
 	display: grid;
 	gap: 12px;
 }
 
-body.settings_page_aero .aero-diagnostic-item {
+body.aero-admin-page .aero-diagnostic-item {
 	display: flex;
 	align-items: center;
 	gap: 12px;
 	padding: 12px;
 	background: #0a0a0a !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 }
 
-body.settings_page_aero .aero-diagnostic-item.aero-diagnostic-pass {
+body.aero-admin-page .aero-diagnostic-item.aero-diagnostic-pass {
 	border-left: 3px solid #059669 !important;
 }
 
-body.settings_page_aero .aero-diagnostic-item.aero-diagnostic-fail {
+body.aero-admin-page .aero-diagnostic-item.aero-diagnostic-fail {
 	border-left: 3px solid #dc2626 !important;
 }
 
-body.settings_page_aero .aero-diagnostic-item.aero-diagnostic-fail.aero-diagnostic-critical {
+body.aero-admin-page .aero-diagnostic-item.aero-diagnostic-fail.aero-diagnostic-critical {
 	background: #1a0f0f !important;
 }
 
-body.settings_page_aero .aero-diagnostic-icon {
+body.aero-admin-page .aero-diagnostic-icon {
 	flex-shrink: 0;
 	width: 20px;
 	height: 20px;
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-diagnostic-pass .aero-diagnostic-icon {
+body.aero-admin-page .aero-diagnostic-pass .aero-diagnostic-icon {
 	color: #059669 !important;
 }
 
-body.settings_page_aero .aero-diagnostic-fail .aero-diagnostic-icon {
+body.aero-admin-page .aero-diagnostic-fail .aero-diagnostic-icon {
 	color: #dc2626 !important;
 }
 
-body.settings_page_aero .aero-diagnostic-label {
+body.aero-admin-page .aero-diagnostic-label {
 	flex: 1;
 	color: #e5e5e5 !important;
 	font-size: 14px;
 }
 
-body.settings_page_aero .aero-diagnostic-extra {
+body.aero-admin-page .aero-diagnostic-extra {
 	color: #999 !important;
 	font-size: 13px;
 	margin-left: 8px;
 }
 
 /* Upgrade Notice */
-body.settings_page_aero .aero-upgrade-notice {
+body.aero-admin-page .aero-upgrade-notice {
 	margin-top: 20px;
 	padding-top: 20px;
 	border-top: 1px solid #313131;
 }
 
-body.settings_page_aero .aero-upgrade-content {
+body.aero-admin-page .aero-upgrade-content {
 	background: #0a0a0a !important;
 	border: 1px solid #ff9800 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 20px;
 }
 
-body.settings_page_aero .aero-upgrade-text {
+body.aero-admin-page .aero-upgrade-text {
 	color: #e5e5e5 !important;
 	font-size: 14px;
 	line-height: 1.6;
 	margin-bottom: 15px;
 }
 
-body.settings_page_aero .aero-upgrade-text strong {
+body.aero-admin-page .aero-upgrade-text strong {
 	color: #ff9800 !important;
 }
 
-body.settings_page_aero .aero-upgrade-button {
+body.aero-admin-page .aero-upgrade-button {
 	display: inline-flex;
 	align-items: center;
-	background: #2e5aac !important;
+	background: #4a80f0 !important;
 	color: #fff !important;
 	padding: 10px 20px !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	text-decoration: none !important;
 	font-weight: 600;
 	font-size: 14px;
 	transition: background 0.2s ease !important;
 }
 
-body.settings_page_aero .aero-upgrade-button:hover {
+body.aero-admin-page .aero-upgrade-button:hover {
 	background: #244a8f !important;
 	color: #fff !important;
 }
 
 /* Loading States */
-body.settings_page_aero .aero-loading-dots {
+body.aero-admin-page .aero-loading-dots {
 	color: #999 !important;
 }
 
-body.settings_page_aero .aero-loading-dots span {
+body.aero-admin-page .aero-loading-dots span {
 	animation: aero-dot-blink 1.4s infinite;
 	animation-fill-mode: both;
 }
 
-body.settings_page_aero .aero-loading-dots span:nth-child(2) {
+body.aero-admin-page .aero-loading-dots span:nth-child(2) {
 	animation-delay: 0.2s;
 }
 
-body.settings_page_aero .aero-loading-dots span:nth-child(3) {
+body.aero-admin-page .aero-loading-dots span:nth-child(3) {
 	animation-delay: 0.4s;
 }
 
@@ -658,18 +658,18 @@ body.settings_page_aero .aero-loading-dots span:nth-child(3) {
 	}
 }
 
-body.settings_page_aero .aero-diagnostic-loading {
+body.aero-admin-page .aero-diagnostic-loading {
 	border-left: 3px solid #313131 !important;
 	opacity: 0.6;
 }
 
-body.settings_page_aero .aero-diagnostic-spinner {
+body.aero-admin-page .aero-diagnostic-spinner {
 	flex-shrink: 0;
 	width: 20px;
 	height: 20px;
 	border: 2px solid #313131;
-	border-top-color: #2e5aac;
-	border-radius: 50%;
+	border-top-color: #4a80f0;
+	border-radius: 0;
 	animation: aero-spin 0.8s linear infinite;
 }
 
@@ -680,92 +680,92 @@ body.settings_page_aero .aero-diagnostic-spinner {
 }
 
 /* Batcache Configuration Styles */
-body.settings_page_aero .aero-batcache-field {
+body.aero-admin-page .aero-batcache-field {
 	margin-bottom: 15px;
 }
 
-body.settings_page_aero .aero-batcache-field label {
+body.aero-admin-page .aero-batcache-field label {
 	display: block;
 	margin-bottom: 8px;
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-number-input {
+body.aero-admin-page .aero-number-input {
 	width: 100%;
 	max-width: 300px;
 	background: #0a0a0a !important;
 	color: #e5e5e5 !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 8px 12px !important;
 	font-size: 14px !important;
 	transition: border-color 0.2s ease !important;
 }
 
-body.settings_page_aero .aero-number-input:focus {
+body.aero-admin-page .aero-number-input:focus {
 	outline: none !important;
-	border-color: #2e5aac !important;
+	border-color: #4a80f0 !important;
 	background: #000 !important;
 }
 
-body.settings_page_aero .aero-number-input:disabled {
+body.aero-admin-page .aero-number-input:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
 
-body.settings_page_aero .aero-text-input {
+body.aero-admin-page .aero-text-input {
 	width: 100%;
 	background: #0a0a0a !important;
 	color: #e5e5e5 !important;
 	border: 1px solid #313131 !important;
-	border-radius: 0 !important;
+	border-radius: 0;
 	padding: 10px 12px !important;
 	font-size: 14px !important;
 	transition: border-color 0.2s ease !important;
 	font-family: 'Courier New', Courier, monospace !important;
 }
 
-body.settings_page_aero .aero-text-input:focus {
+body.aero-admin-page .aero-text-input:focus {
 	outline: none !important;
-	border-color: #2e5aac !important;
+	border-color: #4a80f0 !important;
 	background: #000 !important;
 }
 
-body.settings_page_aero .aero-text-input:disabled {
+body.aero-admin-page .aero-text-input:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
 
-body.settings_page_aero .aero-text-input::placeholder {
+body.aero-admin-page .aero-text-input::placeholder {
 	color: #666 !important;
 	opacity: 1 !important;
 }
 
-body.settings_page_aero .aero-batcache-notice {
-	background: rgba(46, 90, 172, 0.08) !important;
-	border-left: 3px solid #2e5aac !important;
+body.aero-admin-page .aero-batcache-notice {
+	background: rgba(74, 128, 240, 0.08) !important;
+	border-left: 3px solid #4a80f0 !important;
 	padding: 15px !important;
 	margin-bottom: 20px !important;
 	color: #e5e5e5 !important;
 }
 
-body.settings_page_aero .aero-diagnostic-item.aero-diagnostic-optional {
+body.aero-admin-page .aero-diagnostic-item.aero-diagnostic-optional {
 	opacity: 0.85;
 }
 
-body.settings_page_aero .aero-diagnostic-item.aero-diagnostic-pass.aero-diagnostic-optional {
+body.aero-admin-page .aero-diagnostic-item.aero-diagnostic-pass.aero-diagnostic-optional {
 	border-left: 3px solid #6366f1 !important;
 }
 
-body.settings_page_aero .aero-diagnostic-item.aero-diagnostic-fail.aero-diagnostic-optional {
+body.aero-admin-page .aero-diagnostic-item.aero-diagnostic-fail.aero-diagnostic-optional {
 	border-left: 3px solid #999 !important;
 	background: #0f0f0f !important;
 }
 
-body.settings_page_aero .aero-diagnostic-pass.aero-diagnostic-optional .aero-diagnostic-icon {
+body.aero-admin-page .aero-diagnostic-pass.aero-diagnostic-optional .aero-diagnostic-icon {
 	color: #6366f1 !important;
 }
 
-body.settings_page_aero .aero-diagnostic-fail.aero-diagnostic-optional .aero-diagnostic-icon {
+body.aero-admin-page .aero-diagnostic-fail.aero-diagnostic-optional .aero-diagnostic-icon {
 	color: #999 !important;
 }

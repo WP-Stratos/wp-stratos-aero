@@ -3,13 +3,15 @@
 Plugin Name: Aero
 Plugin URI: https://wpstratos.com
 Description: Real performance optimization with Critical CSS, preloading, and Elementor support. 🚀
-Version: 1.7.2
+Version: 2.10.1
 Author: WP Stratos
 Author URI: https://wpstratos.com
+License: GPL-3.0-or-later
+License URI: https://www.gnu.org/licenses/gpl-3.0.html
 */
 
 if ( !defined ('AERO_PLUGIN_VERSION_NUM' ) ) {
-    define( 'AERO_PLUGIN_VERSION_NUM', '1.7.2' );
+    define( 'AERO_PLUGIN_VERSION_NUM', '2.10.1' );
 }
 if ( !defined ('AERO_MINIFY_LIBRARY_PATH' ) ) {
 	define( 'AERO_MINIFY_LIBRARY_PATH', plugin_dir_path( __FILE__ ) . 'includes/min' );
@@ -28,7 +30,18 @@ if ( !defined ('AERO_BACKUP_DIR' ) ) {
 }
 
 require_once( plugin_dir_path( __FILE__ ) . 'clear-minified-cache.php' );
+require_once( plugin_dir_path( __FILE__ ) . 'includes/optimizer/fonts.php' );
+require_once( plugin_dir_path( __FILE__ ) . 'includes/optimizer/bloat.php' );
+require_once( plugin_dir_path( __FILE__ ) . 'includes/optimizer/delivery.php' );
 require_once( plugin_dir_path( __FILE__ ) . 'rating-support.php' );
+
+// Aero Cache Manager — full cache management suite (object cache, Batcache,
+// Edge Cache, scheduled flushes, guest-mode isolation)
+require_once( plugin_dir_path( __FILE__ ) . 'includes/cache-manager/loader.php' );
+
+// Aero Image Optimizer — local WebP/AVIF conversion, compression, delivery
+// and media replacement (engine derived from CompressX, GPL-3.0-or-later)
+require_once( plugin_dir_path( __FILE__ ) . 'includes/image-optimizer/loader.php' );
 
 require_once( AERO_MINIFY_LIBRARY_PATH . "/src/Minify.php" );
 require_once( AERO_MINIFY_LIBRARY_PATH . "/src/CSS.php" );
@@ -52,18 +65,8 @@ function aero_add_stylesheet() {
 	do_action( 'aero_rating_system_action' );
 }
 
-// Hide other plugin notices on Aero settings page
-add_action( 'admin_notices', 'aero_hide_other_notices', 1 );
-function aero_hide_other_notices() {
-	$screen = get_current_screen();
-	if ( $screen && $screen->id === 'settings_page_aero' ) {
-		remove_all_actions( 'admin_notices' );
-		remove_all_actions( 'all_admin_notices' );
-		// Re-add only Aero notices
-		add_action( 'admin_notices', 'aero_cache_cleared_notice' );
-		add_action( 'admin_notices', 'aero_submit_review_notice' );
-	}
-}
+// NOTE: third-party admin notices are suppressed on all Aero screens by
+// aero_ui_hide_other_notices() in includes/cache-manager/admin-ui.php.
 
 // Register AJAX handlers for diagnostics
 add_action( 'wp_ajax_aero_get_diagnostics', 'aero_ajax_get_diagnostics' );
@@ -86,15 +89,48 @@ function aero_ajax_get_diagnostics() {
 	$css_file_count = aero_count_files(AERO_CSS_CACHE_DIR);
 	$js_file_count = aero_count_files(AERO_JS_CACHE_DIR);
 	
+	// Edge Cache + schedule state (cache-manager module)
+	$edge = array(
+		'available' => class_exists( 'Edge_Cache_Plugin' ),
+		'enabled'   => ( get_option( 'edge-cache-enabled' ) === 'enabled' ),
+	);
+	$next     = ( defined( 'AERO_CM_CRON_HOOK' ) ) ? wp_next_scheduled( AERO_CM_CRON_HOOK ) : false;
+	$schedule = array(
+		'enabled' => ( get_option( 'aero_cm_schedule_enabled' ) === '1' ),
+		'next'    => $next ? gmdate( 'j M Y, g:ia', $next ) . ' UTC' : '',
+	);
+
+	// Cache warmer state (for the Optimization statistics band)
+	$warmer = array( 'available' => function_exists( 'aero_cw_opts' ) );
+	if ( $warmer['available'] ) {
+		$cw_stats           = get_option( 'aero_cw_stats', array() );
+		$cw_queue           = get_option( 'aero_cw_queue', array() );
+		$warmer['enabled']  = aero_cw_enabled();
+		$warmer['running']  = (bool) get_option( 'aero_cw_running' );
+		$warmer['total']    = is_array( $cw_queue ) ? count( $cw_queue ) : 0;
+		$warmer['done']     = count( wp_list_filter( (array) $cw_queue, array( 'status' => 'done' ) ) );
+		$warmer['failed']   = count( wp_list_filter( (array) $cw_queue, array( 'status' => 'failed' ) ) );
+		$warmer['reason']   = isset( $cw_stats['reason'] ) ? sanitize_text_field( $cw_stats['reason'] ) : '';
+		$warmer['started']  = isset( $cw_stats['started'] ) ? (int) $cw_stats['started'] : 0;
+	}
+
 	wp_send_json_success( array(
-		'hosting' => $hosting_info,
-		'dropins' => $dropins,
-		'batcache' => $batcache, // ADD THIS LINE
-		'cache_stats' => array(
-			'css_files' => $css_file_count,
-			'js_files' => $js_file_count,
-			'total_size' => aero_format_bytes($total_cache_size)
-		)
+		'hosting'         => $hosting_info,
+		'dropins'         => $dropins,
+		'batcache'        => $batcache,
+		'edge'            => $edge,
+		'schedule'        => $schedule,
+		'warmer'          => $warmer,
+		'last_full_flush' => get_option( 'aero_cm_last_full_flush', '' ),
+		'cache_stats'     => array(
+			'css_files'      => $css_file_count,
+			'js_files'       => $js_file_count,
+			'css_size'       => aero_format_bytes( $css_cache_size ),
+			'js_size'        => aero_format_bytes( $js_cache_size ),
+			'css_size_bytes' => (int) $css_cache_size,
+			'js_size_bytes'  => (int) $js_cache_size,
+			'total_size'     => aero_format_bytes( $total_cache_size ),
+		),
 	) );
 }
 
@@ -120,8 +156,10 @@ function aero_ajax_refresh_debug() {
 	// Set rate limit
 	set_transient( 'aero_debug_last_refresh', time(), 30 * 60 );
 	
-	// Generate fresh debug info
-	$fresh_debug_info = aero_generate_debug_info();
+	// Generate fresh debug info (full report incl. cache-manager addendum)
+	$fresh_debug_info = function_exists( 'aero_cm_full_debug_report' )
+		? aero_cm_full_debug_report()
+		: aero_generate_debug_info();
 	
 	wp_send_json_success( array(
 		'debug_info' => $fresh_debug_info
@@ -152,17 +190,17 @@ function aero_ajax_auto_configure_batcache() {
 
 add_action( 'admin_head', 'aero_add_critical_css' );
 function aero_add_critical_css() {
-	$screen = get_current_screen();
-	if ( $screen && $screen->id === 'settings_page_aero' ) {
-		?>
-		<style type="text/css">
-		body.settings_page_aero { background: #000 !important; }
-		body.settings_page_aero #wpbody-content { background: #000 !important; }
-		body.settings_page_aero #wpbody { background: #000 !important; }
-		body.settings_page_aero #wpcontent { background: #000 !important; }
-		</style>
-		<?php
+	if ( ! function_exists( 'aero_ui_is_aero_screen' ) || ! aero_ui_is_aero_screen() ) {
+		return;
 	}
+	?>
+	<style type="text/css">
+	body.aero-admin-page { background: #000 !important; }
+	body.aero-admin-page #wpbody-content { background: #000 !important; }
+	body.aero-admin-page #wpbody { background: #000 !important; }
+	body.aero-admin-page #wpcontent { background: #000 !important; }
+	</style>
+	<?php
 }
 
 // Inject custom CSS for normal mode
@@ -182,13 +220,13 @@ function aero_inject_custom_css() {
 	}
 }
 
-add_action( 'admin_menu', 'aero_add_admin_menu' );
-function aero_add_admin_menu() {
-	add_options_page( 'Aero', 'Aero', 'manage_options', 'aero', 'aero_admin_options' );
-}
+// NOTE: Aero's menu is registered by includes/cache-manager/admin-ui.php —
+// one top-level "Aero" menu with Optimization / Cache / Edge Cache /
+// Purge & Schedule / Experimental submenus. aero_admin_options() below is
+// rendered inside that shell as the Optimization screen.
 
 function aero_settings_link( $links ) {
-	$settings_link = '<a href="options-general.php?page=aero">Settings</a>';
+	$settings_link = '<a href="admin.php?page=aero">Settings</a>';
 	array_unshift($links, $settings_link);
 	return $links;
 }
@@ -207,706 +245,622 @@ function aero_plugin_meta_links( $links, $file ) {
 }
 add_filter( 'plugin_row_meta', 'aero_plugin_meta_links', 10, 2 );
 
-function aero_admin_options() {
-	if ( !current_user_can( 'manage_options' ) )  {
-		wp_die( __('You do not have sufficient permissions to access this page.') );
+// ── Optimization screen save (admin_init: PRG-safe) ──────────────────────────
+// NOTE: Guest Mode lives on the Experimental screen, Debug Mode on the Debug
+// screen, and Batcache configuration on the Cache screen — this handler must
+// never touch those options.
+add_action( 'admin_init', 'aero_handle_optimization_save', 5 );
+function aero_handle_optimization_save() {
+	if ( ! isset( $_POST['aero_submit_hidden'] ) || 'Y' !== $_POST['aero_submit_hidden'] ) {
+		return;
+	}
+	if ( ! isset( $_REQUEST['_wpnonce'] ) || ! wp_verify_nonce( $_REQUEST['_wpnonce'], 'aero_settings_nonce' ) ||
+		 ! current_user_can( 'manage_options' ) ) {
+		return;
 	}
 
-	$hidden_field_name = 'aero_submit_hidden';
-    $combine_js = 'aero_combine_js';
-    $combine_css = 'aero_combine_css';
-	$compress_html = 'aero_compress_html';
-	$defer_js = 'aero_defer_js';
-	$optimize_fonts = 'aero_optimize_fonts';
-	$preload_critical = 'aero_preload_critical';
-	$guest_mode_level = 'aero_guest_mode_level';
-	$debug_mode = 'aero_debug_mode';
-
-    $combine_js_val = get_option($combine_js);
-    $combine_css_val = get_option($combine_css);
-	$compress_html_val = get_option($compress_html);
-	$defer_js_val = get_option($defer_js);
-	$optimize_fonts_val = get_option($optimize_fonts);
-	$preload_critical_val = get_option($preload_critical);
-	$guest_mode_level_val = get_option($guest_mode_level, 'off');
-	$debug_mode_val = get_option($debug_mode);
-
-	if( isset( $_POST[$hidden_field_name] ) && $_POST[$hidden_field_name] == 'Y' ) {
-    	if ( isset( $_REQUEST['_wpnonce'] ) && wp_verify_nonce( $_REQUEST['_wpnonce'], 'aero_settings_nonce' ) ) {
-			if ( isset( $_POST['aero_clear_minified'] ) ) {
-				aero_clear_minified_cache();
-			}
-			// Handle Batcache configuration update
-			elseif ( isset( $_POST['aero_save_batcache'] ) && aero_can_configure_batcache() ) {
-				$batcache_max_age = isset( $_POST['aero_batcache_max_age'] ) ? intval($_POST['aero_batcache_max_age']) : 86400;
-				$batcache_seconds = isset( $_POST['aero_batcache_seconds'] ) ? intval($_POST['aero_batcache_seconds']) : 0;
-				$batcache_times = isset( $_POST['aero_batcache_times'] ) ? intval($_POST['aero_batcache_times']) : 1;
-				$batcache_noskip_cookies = isset( $_POST['aero_batcache_noskip_cookies'] ) ? sanitize_text_field($_POST['aero_batcache_noskip_cookies']) : '';
-				
-				$result = aero_update_batcache_config($batcache_max_age, $batcache_seconds, $batcache_times, $batcache_noskip_cookies);
-				
-				if ($result['success']) {
-					echo '<div class="updated aero-notice"><p><strong>' . esc_html($result['message']) . '</strong></p></div>';
-				} else {
-					echo '<div class="error aero-notice"><p><strong>Error:</strong> ' . esc_html($result['message']) . '</p></div>';
-				}
-			}
-			else {			
-				$combine_js_val = ( isset( $_POST[$combine_js] ) ? 'on' : 'off' );
-				$combine_css_val = ( isset( $_POST[$combine_css] ) ? 'on' : 'off' );
-				$compress_html_val = ( isset( $_POST[$compress_html] ) ? 'on' : 'off' );
-				$defer_js_val = ( isset( $_POST[$defer_js] ) ? 'on' : 'off' );
-				$optimize_fonts_val = ( isset( $_POST[$optimize_fonts] ) ? 'on' : 'off' );
-				$preload_critical_val = ( isset( $_POST[$preload_critical] ) ? 'on' : 'off' );
-				$guest_mode_level_val = isset( $_POST[$guest_mode_level] ) ? $_POST[$guest_mode_level] : 'off';
-				$debug_mode_val = ( isset( $_POST[$debug_mode] ) ? 'on' : 'off' );
-				$custom_css_normal = isset( $_POST['aero_custom_css_normal'] ) ? $_POST['aero_custom_css_normal'] : '';
-				$custom_css_guest = isset( $_POST['aero_custom_css_guest'] ) ? $_POST['aero_custom_css_guest'] : '';
-	
-				update_option( $combine_js, $combine_js_val );
-				update_option( $combine_css, $combine_css_val );
-				update_option( $compress_html, $compress_html_val );
-				update_option( $defer_js, $defer_js_val );
-				update_option( $optimize_fonts, $optimize_fonts_val );
-				update_option( $preload_critical, $preload_critical_val );
-				update_option( $guest_mode_level, $guest_mode_level_val );
-				update_option( $debug_mode, $debug_mode_val );
-				update_option( 'aero_custom_css_normal', $custom_css_normal );
-				update_option( 'aero_custom_css_guest', $custom_css_guest );	
-	
-				echo '<div class="updated aero-notice"><p><strong>Settings Saved.</strong></p></div>';
-			}
+	if ( isset( $_POST['aero_clear_minified'] ) ) {
+		aero_clear_minified_cache();
+		if ( function_exists( 'aero_ui_flash_add' ) ) {
+			aero_ui_flash_add( __( 'Minified CSS/JS cache cleared.', 'aero' ), 'success' );
+			aero_ui_redirect( 'aero' );
 		}
+		return;
 	}
-	?>
-	<div class="wrap aero-wrap">
-	<div class="aero-main-grid">
-	<div class="aero-container">
-	<h2>
-		<span style="display: inline-block; vertical-align: middle; width: 24px; height: 24px;">
-			<svg width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#a)"><path d="M0 46.536A12 12 0 0 0 1.25 48H0zM48 48H26.752a5.4 5.4 0 0 1-2.088-1.774c-.984-1.412-1.324-3.32-1.2-5.536.248-4.432 2.35-10.064 4.81-15.306s5.278-10.088 6.954-12.95c.418-.716.766-1.306 1.018-1.75q.19-.334.306-.55t.148-.314l.012-.046c.002-.01.004-.034-.01-.052a.06.06 0 0 0-.034-.022l-.032.002-.04.022a2 2 0 0 0-.236.242c-.222.254-.584.708-1.112 1.382C26.378 22.7 14.54 31.174 0 30.658V0h48zM39.506 3.704a.04.04 0 0 0-.032.004c-.016.008-.022.022-.024.024l-.006.014-.006.03-.008.1c-.042.688-.04 1.344-.502 1.862a1 1 0 0 1-.564.284q-.168.034-.34.052-.172.02-.332.044l-.02.006-.018.01a.04.04 0 0 0-.014.048.06.06 0 0 0 .02.028l.012.006.018.004.11.014.402.034c.158.012.324.026.462.042l.178.024a1 1 0 0 1 .098.024c.372.17.5.57.538 1.052.018.238.016.492.01.74-.004.246-.01.486.008.694l.01.12.004.04a.04.04 0 0 0 .012.024l.02.014.036-.002.018-.014.008-.014.002-.01V8.87c0-.164 0-.466.022-.808s.064-.722.148-1.042a2 2 0 0 1 .156-.418.6.6 0 0 1 .218-.246.8.8 0 0 1 .262-.074 4 4 0 0 1 .354-.022h.366q.176 0 .306-.012l-.006-.094a2 2 0 0 1-.292-.04 6 6 0 0 1-.4-.096 6 6 0 0 1-.374-.112l-.136-.05a.4.4 0 0 1-.076-.038.6.6 0 0 1-.176-.208 2 2 0 0 1-.144-.338 6 6 0 0 1-.186-.818c-.044-.268-.07-.496-.09-.622l-.014-.074-.008-.026-.014-.018-.022-.012" fill="#fff"/></g><defs><clipPath id="a"><path d="M0 0h48v48H10.5A10.5 10.5 0 0 1 0 37.5z" fill="#fff"/></clipPath></defs></svg>
-		</span>
-		Aero Settings
-	</h2>
-	<hr style="border-color: #313131;" />
-	
-	<div class="aero-diagnostics-container" id="aero-diagnostics">
-		<div class="aero-diagnostics-header">
-			<div class="aero-diagnostics-title">
-				<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 8px;">
-					<path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-1-13h2v6H9V5zm0 8h2v2H9v-2z" fill="currentColor"/>
-				</svg>
-				Quick Start Diagnostics
-			</div>
-			<div class="aero-diagnostics-score" id="aero-diagnostics-score">
-				<span class="aero-loading-dots">Loading<span>.</span><span>.</span><span>.</span></span>
-			</div>
-		</div>
-		
-		<div class="aero-diagnostics-list" id="aero-diagnostics-list">
-			<div class="aero-diagnostic-item aero-diagnostic-loading">
-				<div class="aero-diagnostic-spinner"></div>
-				<div class="aero-diagnostic-label">Checking WP Stratos Hosting...</div>
-			</div>
-			<div class="aero-diagnostic-item aero-diagnostic-loading">
-				<div class="aero-diagnostic-spinner"></div>
-				<div class="aero-diagnostic-label">Checking Object Cache...</div>
-			</div>
-			<div class="aero-diagnostic-item aero-diagnostic-loading">
-				<div class="aero-diagnostic-spinner"></div>
-				<div class="aero-diagnostic-label">Checking Page Cache...</div>
-			</div>
-		</div>
-		
-		<div id="aero-upgrade-notice" style="display:none;">
-			<div class="aero-upgrade-notice">
-				<div class="aero-upgrade-content">
-					<div class="aero-upgrade-text">
-						<strong>Not on WP Stratos hosting?</strong> You're missing out on significant performance improvements. WP Stratos provides optimized infrastructure with built-in caching, CDN, and performance features that work seamlessly with Aero.
-					</div>
-					<a href="https://wpstratos.com" target="_blank" class="aero-upgrade-button" style="color:#ffffff !important;">
-						Learn About WP Stratos
-						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-left: 6px;">
-							<path d="M12 8.667V12.667C12 13.403 11.403 14 10.667 14H3.333C2.597 14 2 13.403 2 12.667V5.333C2 4.597 2.597 4 3.333 4H7.333M10 2H14M14 2V6M14 2L6 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-						</svg>
-					</a>
-				</div>
-			</div>
-		</div>
-	</div>
-	
-	<script>
-	jQuery(document).ready(function($) {
-		// Fetch diagnostics via AJAX
-		$.ajax({
-			url: ajaxurl,
-			type: 'POST',
-			data: {
-				action: 'aero_get_diagnostics',
-				nonce: '<?php echo wp_create_nonce('aero_diagnostics_nonce'); ?>'
-			},
-			success: function(response) {
-				if (response.success) {
-					aeroUpdateDiagnostics(response.data);
-					aeroUpdateCacheStats(response.data.cache_stats);
-				}
-			},
-			error: function() {
-				// Show error state for diagnostics
-				$('#aero-diagnostics-list').html('<div class="aero-diagnostic-item aero-diagnostic-fail"><div class="aero-diagnostic-label">Failed to load diagnostics. Please refresh the page.</div></div>');
-				// Show error state for cache stats
-				$('#aero-css-count, #aero-js-count, #aero-total-size').html('<span style="color: #dc2626;">Error</span>');
-			}
-		});
-		
-		function aeroUpdateCacheStats(stats) {
-			$('#aero-css-count').html(stats.css_files + ' files');
-			$('#aero-js-count').html(stats.js_files + ' files');
-			$('#aero-total-size').html(stats.total_size);
-		}
-		
-		function aeroUpdateDiagnostics(data) {
-			var hosting = data.hosting;
-			var dropins = data.dropins;
-			var batcache = data.batcache;
-			
-			var checks = [
-				{
-					label: 'WP Stratos Hosting',
-					status: hosting.is_wpstratos,
-					type: 'critical'
-				},
-				{
-					label: 'Object Cache (object-cache.php)',
-					status: dropins.object_cache,
-					type: 'important'
-				},
-				{
-					label: 'Page Cache (advanced-cache.php)',
-					status: dropins.advanced_cache,
-					type: 'important'
-				},
-				{
-					label: 'Batcache Configuration',
-					status: batcache.exists,
-					type: 'optional',
-					extra: batcache.exists ? 
-						'Max Age: ' + batcache.values.max_age + 's, Times: ' + batcache.values.times : 
-						''
-				}
-			];
-			
-			var passed = 0;
-			var html = '';
-			
-			checks.forEach(function(check) {
-				if (check.status) passed++;
-				
-				var statusClass = check.status ? 'aero-diagnostic-pass' : 'aero-diagnostic-fail';
-				var typeClass = 'aero-diagnostic-' + check.type;
-				var icon = check.status ? 
-					'<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm-1.5 15l-4-4 1.41-1.41L8.5 12.17l5.09-5.09L15 8.5l-6.5 6.5z" fill="currentColor"/></svg>' :
-					'<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0zm1 15H9v-2h2v2zm0-4H9V5h2v6z" fill="currentColor"/></svg>';
-				
-				html += '<div class="aero-diagnostic-item ' + statusClass + ' ' + typeClass + '">';
-				html += '<div class="aero-diagnostic-icon">' + icon + '</div>';
-				html += '<div class="aero-diagnostic-label">' + check.label;
-				if (check.extra) {
-					html += '<span class="aero-diagnostic-extra">' + check.extra + '</span>';
-				}
-				html += '</div></div>';
-			});
-			
-			$('#aero-diagnostics-list').html(html);
-			$('#aero-diagnostics-score').html(passed + '/' + checks.length + ' Passed');
-			
-			// Update container class and show upgrade notice
-			if (!hosting.is_wpstratos) {
-				$('#aero-diagnostics').addClass('aero-not-wpstratos');
-				$('#aero-upgrade-notice').show();
-			}
-			
-			// Show auto-configure button if eligible but not configured
-			if (hosting.is_wpstratos && dropins.object_cache && dropins.advanced_cache && !batcache.exists) {
-				$('#aero-batcache-auto-configure').show();
-			}
-		}
-	});
-	</script>
-	
-	<form method="post" name="options_form">
-	<?php wp_nonce_field( 'aero_settings_nonce' ); ?>
-	<input type="hidden" name="<?php echo $hidden_field_name; ?>" value="Y">
-	
-	<h3 style="color: #e5e5e5; margin-top: 0;">Recommended Settings (Enable All)</h3>
-    <p>
-    <input type="checkbox" name="<?php echo $combine_css; ?>" id="<?php echo $combine_css; ?>" <?php checked( $combine_css_val == 'on',true); ?> />
-    <label for="<?php echo $combine_css; ?>" class="aero_settings" style="display: inline;"> <?php _e('Minify & Cache CSS'); ?> </label>
-    </p>
-	<p>
-	<input type="checkbox" name="<?php echo $combine_js; ?>" id="<?php echo $combine_js; ?>" <?php checked( $combine_js_val == 'on',true); ?> />
-	<label for="<?php echo $combine_js; ?>" class="aero_settings" style="display: inline;"> <?php _e('Minify & Cache JavaScript'); ?> </label>
-	</p>
-	<p>
-	<input type="checkbox" name="<?php echo $compress_html; ?>" id="<?php echo $compress_html; ?>" <?php checked( $compress_html_val == 'on',true); ?> />
-	<label for="<?php echo $compress_html; ?>" class="aero_settings" style="display: inline;"> <?php _e('Compress HTML'); ?> </label>
-	</p>
-	<p>
-	<input type="checkbox" name="<?php echo $defer_js; ?>" id="<?php echo $defer_js; ?>" <?php checked( $defer_js_val == 'on',true); ?> />
-	<label for="<?php echo $defer_js; ?>" class="aero_settings" style="display: inline;"> <?php _e('Defer JavaScript'); ?> </label>
-	<br><span style="color: #999; font-size: 13px; margin-left: 24px;">Defers non-critical JS. jQuery excluded for compatibility.</span>
-	</p>
 
-	<h3 style="color: #e5e5e5; margin-top: 30px;">Advanced Performance</h3>
-	<p>
-	<input type="checkbox" name="<?php echo $preload_critical; ?>" id="<?php echo $preload_critical; ?>" <?php checked( $preload_critical_val == 'on',true); ?> />
-	<label for="<?php echo $preload_critical; ?>" class="aero_settings" style="display: inline;"> <?php _e('Preload Critical Resources'); ?> </label>
-	<br><span style="color: #999; font-size: 13px; margin-left: 24px;">Preloads critical CSS, hero images, and primary fonts. Improves LCP significantly.</span>
-	</p>
-	<p>
-	<input type="checkbox" name="<?php echo $optimize_fonts; ?>" id="<?php echo $optimize_fonts; ?>" <?php checked( $optimize_fonts_val == 'on',true); ?> />
-	<label for="<?php echo $optimize_fonts; ?>" class="aero_settings" style="display: inline;"> <?php _e('Optimize Font Loading'); ?> </label>
-	<br><span style="color: #999; font-size: 13px; margin-left: 24px;">Adds font-display: swap and preconnects to font providers. Prevents CLS from font loading.</span>
-	</p>
-
-	<div class="aero-accordion" style="margin-top: 30px;">
-		<button type="button" class="aero-accordion-header" onclick="aeroToggleAccordion(this)">
-			<span>Guest Mode (Use Only If Needed)</span>
-			<span class="aero-accordion-icon">▼</span>
-		</button>
-		<div class="aero-accordion-content">
-			<div class="aero-accordion-inner">
-				<div class="aero-setting-group">
-					<div class="aero-setting-description" style="margin-bottom: 15px;">
-						<strong style="color: #ff9800;">Only enable this if the optimizations above don't achieve your target score!</strong><br><br>
-						Guest Mode shows PageSpeed tools a super optimized version while real visitors see the full site. 
-						Try all real optimizations first - they're better for actual users.
-					</div>
-					
-					<div class="aero-radio-cards">
-						<label class="aero-radio-card <?php echo $guest_mode_level_val === 'off' ? 'selected' : ''; ?>">
-							<div class="aero-radio-card-header">
-								<span class="aero-radio-card-title">Disabled</span>
-								<input type="radio" name="<?php echo $guest_mode_level; ?>" value="off" <?php checked( $guest_mode_level_val, 'off' ); ?> />
-							</div>
-							<p class="aero-radio-card-description">
-								Guest Mode is off. All visitors see the same optimized site.
-							</p>
-						</label>
-						
-						<label class="aero-radio-card <?php echo $guest_mode_level_val === 'basic' ? 'selected' : ''; ?>">
-							<div class="aero-radio-card-header">
-								<span class="aero-radio-card-title">Basic (Recommended)</span>
-								<input type="radio" name="<?php echo $guest_mode_level; ?>" value="basic" <?php checked( $guest_mode_level_val, 'basic' ); ?> />
-							</div>
-							<p class="aero-radio-card-description">
-								Combines ALL CSS files into one minified file, inlines all fonts (Google Fonts, Adobe Fonts, etc.), and removes all JavaScript for PageSpeed tools. Eliminates render-blocking requests. Target: 90+ mobile score.
-							</p>
-						</label>
-						
-						<label class="aero-radio-card warning <?php echo $guest_mode_level_val === 'extreme' ? 'selected' : ''; ?>">
-							<div class="aero-radio-card-header">
-								<span class="aero-radio-card-title">Extreme ⚠️</span>
-								<input type="radio" name="<?php echo $guest_mode_level; ?>" value="extreme" <?php checked( $guest_mode_level_val, 'extreme' ); ?> />
-							</div>
-							<p class="aero-radio-card-description">
-								Aggressive stripping for maximum scores. Keeps only first 2 CSS files. Site may look broken in metric screenshots. <strong>Not recommended.</strong>
-							</p>
-						</label>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div class="aero-accordion" style="margin-top: 15px;">
-		<button type="button" class="aero-accordion-header" onclick="aeroToggleAccordion(this)">
-			<span>Debug Mode (For Support)</span>
-			<span class="aero-accordion-icon">▼</span>
-		</button>
-		<div class="aero-accordion-content">
-			<div class="aero-accordion-inner">
-				<div class="aero-setting-group">
-					<label>
-						<input type="checkbox" name="<?php echo $debug_mode; ?>" id="<?php echo $debug_mode; ?>" <?php checked( $debug_mode_val == 'on',true); ?> />
-						<?php _e('Enable Debug Information'); ?>
-					</label>
-					<div class="aero-setting-description">
-						Enable this to generate detailed debug information. Copy and share with <a href="https://wpstratos.com" target="_blank" style="color: #2e5aac;">WP Stratos support</a> for troubleshooting.
-					</div>
-					
-					<?php if ( $debug_mode_val === 'on' ): ?>
-					<div class="aero-debug-box" style="margin-top: 15px;">
-						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-							<strong style="color: #e5e5e5;">Debug Information</strong>
-							<div>
-								<button type="button" onclick="aeroRefreshDebug(event)" id="aero-refresh-debug-btn" class="button-small" style="background: none !important; color: #2e5aac !important;">Refresh Information</button>
-								<button type="button" onclick="aeroCopyDebug(event)" class="button-small" style="background: #2e5aac; color: #fff; border: none; padding: 5px 12px; cursor: pointer;">Copy to Clipboard</button>
-							</div>
-						</div>
-						<textarea id="aero-debug-info" readonly style="width: 100%; height: 300px; background: #0a0a0a; color: #0f0; border: 1px solid #313131; padding: 10px; font-family: monospace; font-size: 12px; line-height: 1.5;"><?php echo esc_textarea( aero_generate_debug_info() ); ?></textarea>
-					</div>
-					<?php endif; ?>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div class="aero-accordion" style="margin-top: 15px;">
-		<button type="button" class="aero-accordion-header" onclick="aeroToggleAccordion(this)">
-			<span>Advanced CSS Injection</span>
-			<span class="aero-accordion-icon">▼</span>
-		</button>
-		<div class="aero-accordion-content">
-			<div class="aero-accordion-inner">
-				<div class="aero-setting-group">
-					<label for="aero_custom_css_normal">
-						<strong>Custom CSS (Normal Mode)</strong>
-					</label>
-					<div class="aero-setting-description" style="margin-bottom: 10px;">
-						This CSS will be injected inline in the <code>&lt;head&gt;</code> for regular visitors only. Use this for custom styles that should appear during normal site operation. Not included in Guest Mode.
-					</div>
-					<textarea 
-						name="aero_custom_css_normal" 
-						id="aero_custom_css_normal" 
-						class="aero-css-textarea"
-						placeholder="/* Example: Hide elements that break layout */&#10;.problematic-element {&#10;    display: none !important;&#10;}"
-					><?php echo esc_textarea( get_option('aero_custom_css_normal', '') ); ?></textarea>
-				</div>
-				
-				<div class="aero-setting-group" style="margin-top: 20px;">
-					<label for="aero_custom_css_guest">
-						<strong>Custom CSS (Guest Mode Only)</strong>
-					</label>
-					<div class="aero-setting-description" style="margin-bottom: 10px;">
-						This CSS will be appended to the combined CSS file when Guest Mode is active. Use this to fix visibility issues caused by JavaScript removal (e.g., GSAP animations stuck at opacity: 0). Only appears for PageSpeed testing tools.
-					</div>
-					<textarea 
-						name="aero_custom_css_guest" 
-						id="aero_custom_css_guest" 
-						class="aero-css-textarea"
-						placeholder="/* Example: Fix GSAP animations stuck at opacity 0 */&#10;.gsap-animated,&#10;.fade-in-element {&#10;    opacity: 1 !important;&#10;    transform: none !important;&#10;}"
-					><?php echo esc_textarea( get_option('aero_custom_css_guest', '') ); ?></textarea>
-				</div>
-				
-				<div class="aero-setting-description" style="margin-top: 15px; padding: 12px; background: rgba(46, 90, 172, 0.08); border-left: 3px solid #2e5aac;">
-					<strong>💡 Pro Tip:</strong> Use browser DevTools to inspect elements that appear broken in Guest Mode. Common fixes include setting <code>opacity: 1</code>, <code>display: block</code>, or <code>visibility: visible</code> on elements that rely on JavaScript for initial visibility.
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<?php
-	// Only show Batcache settings if on WP Stratos hosting
-	$can_configure_batcache = aero_can_configure_batcache();
-	$batcache_config = aero_check_batcache_config();
-	if ( $can_configure_batcache ) :
-	?>
-	<div class="aero-accordion" style="margin-top: 15px;">
-		<button type="button" class="aero-accordion-header" onclick="aeroToggleAccordion(this)">
-			<span>
-				Page Cache Configuration (Batcache)
-				<?php if ( $batcache_config['exists'] ) : ?>
-					<span style="color: #059669; font-size: 13px; font-weight: 400; margin-left: 8px;">✓ Configured</span>
-				<?php endif; ?>
-			</span>
-			<span class="aero-accordion-icon">▼</span>
-		</button>
-		<div class="aero-accordion-content">
-			<div class="aero-accordion-inner">
-				<?php if ( !$batcache_config['exists'] ) : ?>
-					<div class="aero-batcache-notice" style="background: rgba(46, 90, 172, 0.08); border-left: 3px solid #2e5aac; padding: 15px; margin-bottom: 20px;">
-						<strong>Batcache Not Configured</strong><br>
-						Your site has all the requirements but Batcache hasn't been configured in wp-config.php yet. Click the button below to automatically add optimized Batcache settings.
-						<div style="margin-top: 15px;">
-							<button type="button" id="aero-batcache-auto-configure" class="button aero-button">
-								Auto-Configure Batcache
-							</button>
-							<span id="aero-batcache-auto-status" style="margin-left: 10px; color: #999;"></span>
-						</div>
-					</div>
-				<?php endif; ?>
-				
-				<?php if ( !$batcache_config['writable'] && !$batcache_config['exists'] ) : ?>
-					<div class="aero-batcache-notice" style="background: rgba(220, 38, 38, 0.08); border-left: 3px solid #dc2626; padding: 15px; margin-bottom: 20px;">
-						<strong>⚠️ Warning:</strong> wp-config.php is not writable. Automatic configuration may fail. You may need to manually add the Batcache configuration or make the file temporarily writable.
-					</div>
-				<?php endif; ?>
-				
-				<div class="aero-setting-group">
-					<div class="aero-setting-description" style="margin-bottom: 20px;">
-						Batcache is a server-side page caching system that stores rendered HTML pages to improve performance. 
-						These settings control how aggressive the caching is.
-					</div>
-					
-					<div style="display: grid; gap: 20px;">
-						<div class="aero-batcache-field">
-							<label for="aero_batcache_max_age">
-								<strong>Cache Lifetime (seconds)</strong>
-							</label>
-							<input 
-								type="number" 
-								name="aero_batcache_max_age" 
-								id="aero_batcache_max_age" 
-								value="<?php echo esc_attr( $batcache_config['values']['max_age'] ?? 86400 ); ?>"
-								min="0"
-								step="1"
-								class="aero-number-input"
-								<?php echo !$batcache_config['writable'] && $batcache_config['exists'] ? 'disabled' : ''; ?>
-							/>
-							<div class="aero-setting-description">
-								How long (in seconds) to store cached pages. Default: 86400 (24 hours).
-								<br><strong>Recommended:</strong> 86400-604800 (1-7 days)
-							</div>
-						</div>
-						
-						<div class="aero-batcache-field">
-							<label for="aero_batcache_seconds">
-								<strong>Wait Time (seconds)</strong>
-							</label>
-							<input 
-								type="number" 
-								name="aero_batcache_seconds" 
-								id="aero_batcache_seconds" 
-								value="<?php echo esc_attr( $batcache_config['values']['seconds'] ?? 0 ); ?>"
-								min="0"
-								step="1"
-								class="aero-number-input"
-								<?php echo !$batcache_config['writable'] && $batcache_config['exists'] ? 'disabled' : ''; ?>
-							/>
-							<div class="aero-setting-description">
-								How long to wait before caching. Set to 0 for instant caching. Default: 0.
-								<br><strong>Recommended:</strong> 0 (cache immediately)
-							</div>
-						</div>
-						
-						<div class="aero-batcache-field">
-							<label for="aero_batcache_times">
-								<strong>Visitor Threshold</strong>
-							</label>
-							<input 
-								type="number" 
-								name="aero_batcache_times" 
-								id="aero_batcache_times" 
-								value="<?php echo esc_attr( $batcache_config['values']['times'] ?? 1 ); ?>"
-								min="1"
-								step="1"
-								class="aero-number-input"
-								<?php echo !$batcache_config['writable'] && $batcache_config['exists'] ? 'disabled' : ''; ?>
-							/>
-							<div class="aero-setting-description">
-								Number of visitors required before a page is cached. Default: 1.
-								<br><strong>Recommended:</strong> 1 (cache after first visit)
-							</div>
-						</div>
-						
-						<div class="aero-batcache-field">
-							<label for="aero_batcache_noskip_cookies">
-								<strong>Ignored Cookies (Advanced)</strong>
-							</label>
-							<input 
-								type="text" 
-								name="aero_batcache_noskip_cookies" 
-								id="aero_batcache_noskip_cookies" 
-								value="<?php echo esc_attr( $batcache_config['values']['noskip_cookies'] ?? 'wordpress_test_cookie, wp-wpml_current_language, wpml_browser_redirect_test' ); ?>"
-								class="aero-text-input"
-								placeholder="wordpress_test_cookie, wp-wpml_current_language, wpml_browser_redirect_test"
-								<?php echo !$batcache_config['writable'] && $batcache_config['exists'] ? 'disabled' : ''; ?>
-							/>
-							<div class="aero-setting-description">
-								Comma-separated list of cookie prefixes that should not prevent caching. Common plugins like WPML set cookies that would normally bypass cache. These cookies will be ignored, allowing pages to be cached even when they're present.
-								<br><strong>Default:</strong> wordpress_test_cookie, wp-wpml_current_language, wpml_browser_redirect_test
-								<br><strong>Note:</strong> Only add cookies you're certain should not affect page content.
-							</div>
-						</div>
-					</div>
-					
-					<?php if ( $batcache_config['exists'] && ( $batcache_config['writable'] || @is_writable( aero_get_wp_config_path() ) ) ) : ?>
-					<div style="margin-top: 20px;">
-						<button type="submit" name="aero_save_batcache" class="button button-primary aero-button">
-							Update Batcache Settings
-						</button>
-						<span style="color: #999; font-size: 13px; margin-left: 10px;">
-							A backup will be created in wp-content/aero-backups/
-						</span>
-					</div>
-					<?php endif; ?>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<script>
-	jQuery(document).ready(function($) {
-		// Handle auto-configure button
-		$('#aero-batcache-auto-configure').on('click', function() {
-			var btn = $(this);
-			var status = $('#aero-batcache-auto-status');
-			
-			btn.prop('disabled', true);
-			btn.text('Configuring...');
-			status.text('');
-			
-			$.ajax({
-				url: ajaxurl,
-				type: 'POST',
-				data: {
-					action: 'aero_auto_configure_batcache',
-					nonce: '<?php echo wp_create_nonce('aero_batcache_nonce'); ?>'
-				},
-				success: function(response) {
-					if (response.success) {
-						status.css('color', '#059669').text('✓ ' + response.data.message);
-						btn.text('✓ Configured');
-						setTimeout(function() {
-							location.reload();
-						}, 2000);
-					} else {
-						status.css('color', '#dc2626').text('Error: ' + response.data.message);
-						btn.prop('disabled', false).text('Try Again');
-					}
-				},
-				error: function() {
-					status.css('color', '#dc2626').text('Error: Failed to configure');
-					btn.prop('disabled', false).text('Try Again');
-				}
-			});
-		});
-	});
-	</script>
-	<?php endif; ?>
-
-    <p style="margin-top: 20px;">
-		<input type="submit" value="<?php esc_attr_e('Save Changes') ?>" class="button button-primary aero-button" name="submit" />
-		<button type="submit" name="aero_clear_minified" class="button aero-button aero-button-secondary">Clear Cache</button>
-    </p>
-	</form>
-	
-	<?php
-	$all_optimizations = (
-		$combine_css_val === 'on' && 
-		$combine_js_val === 'on' && 
-		$defer_js_val === 'on' &&
-		$preload_critical_val === 'on' &&
-		$optimize_fonts_val === 'on'
+	$checkbox_options = array(
+		'aero_combine_js', 'aero_combine_css', 'aero_compress_html', 'aero_defer_js',
+		'aero_optimize_fonts', 'aero_preload_critical',
+		// Font engine
+		'aero_fonts_local_google', 'aero_fonts_inline_css', 'aero_fonts_preconnect',
+		'aero_fonts_preload', 'aero_fonts_disable_google',
+		// Delivery
+		'aero_delay_js', 'aero_async_css', 'aero_preload_lcp',
 	);
-	
-	echo '<div style="background: ' . ($all_optimizations ? '#1d2327' : '#854d0e') . '; border-left: 4px solid ' . ($all_optimizations ? '#2e5aac' : '#fbbf24') . '; padding: 15px; margin: 20px 0; color: #e5e5e5;">';
-	
-	if ( $all_optimizations ) {
-		echo '<strong>✅ All optimizations enabled!</strong><br>';
-		echo 'Your site should see significant improvements in LCP, CLS, and overall load time.';
-	} else {
-		echo '<strong>⚠️ Not all optimizations enabled</strong><br>';
-		echo 'For best results, enable all settings above (except Guest Mode).';
+	foreach ( $checkbox_options as $opt ) {
+		update_option( $opt, isset( $_POST[ $opt ] ) ? 'on' : 'off' );
 	}
-	echo '</div>';
+	update_option( 'aero_custom_css_normal', isset( $_POST['aero_custom_css_normal'] ) ? wp_strip_all_tags( wp_unslash( $_POST['aero_custom_css_normal'] ) ) : '' );
+
+	// Delivery extras
+	$timeout = isset( $_POST['aero_delay_js_timeout'] ) ? absint( $_POST['aero_delay_js_timeout'] ) : 0;
+	update_option( 'aero_delay_js_timeout', in_array( $timeout, array( 0, 5, 10 ), true ) ? $timeout : 0 );
+	update_option( 'aero_critical_css', isset( $_POST['aero_critical_css'] ) ? wp_strip_all_tags( wp_unslash( $_POST['aero_critical_css'] ) ) : '' );
+
+	// Exclusion lists (one entry per line; sanitized as plain text)
+	foreach ( array( 'aero_exclude_minify_css', 'aero_exclude_minify_js', 'aero_exclude_defer', 'aero_delay_js_excludes', 'aero_async_css_excludes' ) as $list ) {
+		$raw   = isset( $_POST[ $list ] ) ? wp_unslash( $_POST[ $list ] ) : '';
+		$lines = array_filter( array_map( 'sanitize_text_field', preg_split( '/[\r\n]+/', $raw ) ) );
+		update_option( $list, implode( "\n", $lines ) );
+	}
+
+	// WordPress bloat panel
+	$bloat = aero_bloat_defaults();
+	foreach ( array( 'emojis', 'head_cleanup', 'embeds', 'jquery_migrate', 'dashicons', 'xmlrpc' ) as $key ) {
+		$bloat[ $key ] = isset( $_POST['aero_bloat'][ $key ] ) ? 'on' : 'off';
+	}
+	$hb = isset( $_POST['aero_bloat']['heartbeat'] ) ? sanitize_key( $_POST['aero_bloat']['heartbeat'] ) : 'frontend';
+	$bloat['heartbeat'] = in_array( $hb, array( 'default', 'frontend', 'disable' ), true ) ? $hb : 'frontend';
+	$as = isset( $_POST['aero_bloat']['autosave'] ) ? absint( $_POST['aero_bloat']['autosave'] ) : 60;
+	$bloat['autosave'] = (string) ( in_array( $as, array( 60, 120, 300 ), true ) ? $as : 60 );
+	$rev = isset( $_POST['aero_bloat']['revisions'] ) ? trim( wp_unslash( $_POST['aero_bloat']['revisions'] ) ) : '';
+	$bloat['revisions'] = ( '' === $rev ) ? '' : (string) absint( $rev );
+	update_option( 'aero_bloat', $bloat );
+
+	if ( function_exists( 'aero_ui_flash_add' ) ) {
+		aero_ui_flash_add( __( 'Optimization settings saved.', 'aero' ), 'success' );
+		aero_ui_redirect( 'aero' );
+	}
+}
+
+function aero_admin_options() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
+	}
+
+	$combine_js_val       = get_option( 'aero_combine_js' );
+	$combine_css_val      = get_option( 'aero_combine_css' );
+	$compress_html_val    = get_option( 'aero_compress_html' );
+	$defer_js_val         = get_option( 'aero_defer_js' );
+	$optimize_fonts_val   = get_option( 'aero_optimize_fonts' );
+	$preload_critical_val = get_option( 'aero_preload_critical' );
+
+	$opt_row = function( $name, $val, $title, $sub ) {
+		?>
+		<label class="aero-check-row aero-check-row-simple">
+			<input type="checkbox" name="<?php echo esc_attr( $name ); ?>" <?php checked( $val, 'on' ); ?> />
+			<span class="aero-check-main">
+				<span class="aero-check-title"><?php echo esc_html( $title ); ?></span>
+				<span class="aero-check-sub"><?php echo esc_html( $sub ); ?></span>
+			</span>
+		</label>
+		<?php
+	};
+
+	$diag_nonce = wp_create_nonce( 'aero_diagnostics_nonce' );
 	?>
-	
-	<div class="aero-footer">
-		<p>
-			Powered by <a href="https://wpstratos.com" target="_blank">WP Stratos</a> 
-			| Version: <strong><?php echo AERO_PLUGIN_VERSION_NUM; ?></strong>
-		</p>
-	</div>
+
+	<!-- ═══ Quick Start Diagnostics ═══ -->
+	<div class="aero-section">
+		<div class="aero-diag-head">
+			<div class="aero-eyebrow" style="margin-bottom:0;"><?php esc_html_e( 'Quick Start Diagnostics', 'aero' ); ?></div>
+			<span class="aero-diag-score" id="aero-diag-score"><span class="aero-ui-spinner"></span></span>
+		</div>
+		<div class="aero-diag-list" id="aero-diag-list">
+			<div class="aero-diag-row"><span class="aero-dot idle"></span><span class="aero-diag-label"><?php esc_html_e( 'Running checks…', 'aero' ); ?></span></div>
+		</div>
+		<div id="aero-upgrade-notice" style="display:none;">
+			<div class="aero-info-box" style="margin-top:2px;">
+				<span><strong><?php esc_html_e( 'Not on WP Stratos hosting?', 'aero' ); ?></strong> <?php esc_html_e( "You're missing out on significant performance improvements. WP Stratos provides optimized infrastructure with built-in caching, CDN, and performance features that work seamlessly with Aero.", 'aero' ); ?>
+				<a href="https://wpstratos.com" target="_blank" style="color:#6898f8;"><?php esc_html_e( 'Learn About WP Stratos →', 'aero' ); ?></a></span>
+			</div>
+		</div>
 	</div>
 
-	<div class="aero-sidebar">
-		<h3>Cache Statistics</h3>
-		<div class="aero-stat-item">
-			<span class="aero-stat-label">CSS Cached</span>
-			<span class="aero-stat-value" id="aero-css-count">
-				<span class="aero-loading-dots"><span>.</span><span>.</span><span>.</span></span>
-			</span>
+	<!-- ═══ Cache Statistics ═══ -->
+	<div class="aero-section">
+		<div class="aero-eyebrow"><?php esc_html_e( 'Cache Statistics', 'aero' ); ?></div>
+		<div class="aero-stats-band" id="aero-stats-band">
+			<div class="aero-donut-wrap">
+				<svg class="aero-donut" viewBox="0 0 120 120" role="img" aria-label="<?php esc_attr_e( 'Cache composition', 'aero' ); ?>">
+					<circle class="aero-donut-track" cx="60" cy="60" r="48"></circle>
+					<circle class="aero-donut-seg aero-donut-css" id="aero-donut-css" cx="60" cy="60" r="48"></circle>
+					<circle class="aero-donut-seg aero-donut-js" id="aero-donut-js" cx="60" cy="60" r="48"></circle>
+					<text class="aero-donut-total" id="aero-donut-total" x="60" y="57" text-anchor="middle">…</text>
+					<text class="aero-donut-caption" x="60" y="72" text-anchor="middle"><?php esc_html_e( 'CACHED', 'aero' ); ?></text>
+				</svg>
+				<div class="aero-donut-legend">
+					<span class="aero-legend-item"><span class="aero-legend-swatch css"></span> CSS <em id="aero-legend-css">—</em></span>
+					<span class="aero-legend-item"><span class="aero-legend-swatch js"></span> JS <em id="aero-legend-js">—</em></span>
+				</div>
+			</div>
+			<div class="aero-stat-tiles">
+				<div class="aero-stat-tile"><span class="aero-stat-val" id="aero-css-count">…</span><span class="aero-stat-label"><?php esc_html_e( 'CSS Files', 'aero' ); ?></span></div>
+				<div class="aero-stat-tile"><span class="aero-stat-val" id="aero-js-count">…</span><span class="aero-stat-label"><?php esc_html_e( 'JS Files', 'aero' ); ?></span></div>
+				<div class="aero-stat-tile"><span class="aero-stat-val" id="aero-total-size">…</span><span class="aero-stat-label"><?php esc_html_e( 'Total Size', 'aero' ); ?></span></div>
+				<div class="aero-stat-tile"><span class="aero-stat-val" id="aero-bc-ttl">…</span><span class="aero-stat-label"><?php esc_html_e( 'Batcache TTL', 'aero' ); ?></span></div>
+				<div class="aero-stat-tile aero-stat-tile-wide"><span class="aero-stat-val aero-stat-val-sm" id="aero-last-flush">…</span><span class="aero-stat-label"><?php esc_html_e( 'Last Full Flush', 'aero' ); ?></span></div>
+			</div>
 		</div>
-		<div class="aero-stat-item">
-			<span class="aero-stat-label">JS Cached</span>
-			<span class="aero-stat-value" id="aero-js-count">
-				<span class="aero-loading-dots"><span>.</span><span>.</span><span>.</span></span>
-			</span>
+		<div class="aero-warmth" id="aero-warmth" style="display:none;">
+			<div class="aero-warmth-head">
+				<span class="aero-dot idle" id="aero-warmth-dot"></span>
+				<span class="aero-warmth-title"><?php esc_html_e( 'Cache Warmer', 'aero' ); ?></span>
+				<span id="aero-warmth-state"></span>
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=aero-warmer' ) ); ?>"><?php esc_html_e( 'View queue →', 'aero' ); ?></a>
+			</div>
+			<div class="aero-warmth-bar">
+				<div class="aero-warmth-seg done" id="aero-warmth-done"></div>
+				<div class="aero-warmth-seg failed" id="aero-warmth-failed"></div>
+				<div class="aero-warmth-seg pending" id="aero-warmth-pending"></div>
+			</div>
+			<div class="aero-warmth-meta" id="aero-warmth-meta"></div>
 		</div>
-		<div class="aero-stat-item">
-			<span class="aero-stat-label">Total Saved</span>
-			<span class="aero-stat-value" id="aero-total-size">
-				<span class="aero-loading-dots"><span>.</span><span>.</span><span>.</span></span>
-			</span>
-		</div>
-		
-		<h3 style="margin-top: 30px;">Performance Tips</h3>
-		<div style="font-size: 13px; line-height: 1.6; color: #999;">
-			<strong style="color: #2e5aac;">For Best Results:</strong><br>
-			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Enable all recommended settings<br>
-			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Use optimized images (WebP format)<br>
-			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Minimize third-party scripts<br>
-			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Use <a href="https://wpstratos.com" target="_blank" style="color: #2e5aac;">WP Stratos hosting</a> for optimal performance<br>
-			<svg width="12" height="12" viewBox="0 0 12 12" fill="#999" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;"><circle cx="6" cy="6" r="1.5"/></svg> Enable GZIP compression
-		</div>
-	</div>
 	</div>
 
 	<script>
-	function aeroToggleAccordion(header) {
-		header.classList.toggle('active');
-		var content = header.nextElementSibling;
-		content.classList.toggle('active');
-	}
-	
-	function aeroCopyDebug(e) {
-		e.preventDefault();
-		var debugInfo = document.getElementById('aero-debug-info');
-		debugInfo.select();
-		document.execCommand('copy');
-		
-		var btn = e.target;
-		var originalText = btn.textContent;
-		btn.textContent = '✓ Copied!';
-		btn.style.background = '#059669';
-		
-		setTimeout(function() {
-			btn.textContent = originalText;
-			btn.style.background = '#2e5aac';
-		}, 2000);
-	}
-	
-	function aeroRefreshDebug(e) {
-		e.preventDefault();
-		var btn = document.getElementById('aero-refresh-debug-btn');
-		var originalText = btn.textContent;
-		btn.disabled = true;
-		btn.textContent = 'Refreshing...';
-		
-		jQuery.ajax({
-			url: ajaxurl,
-			type: 'POST',
-			data: {
-				action: 'aero_refresh_debug',
-				nonce: '<?php echo wp_create_nonce('aero_refresh_debug_nonce'); ?>'
-			},
+	jQuery(document).ready(function($) {
+		$.ajax({
+			url: ajaxurl, type: 'POST',
+			data: { action: 'aero_get_diagnostics', nonce: '<?php echo esc_js( $diag_nonce ); ?>' },
 			success: function(response) {
 				if (response.success) {
-					document.getElementById('aero-debug-info').value = response.data.debug_info;
-					btn.textContent = '✓ Refreshed!';
-					btn.style.color = '#059669 !important';
-					setTimeout(function() {
-						btn.textContent = originalText;
-						btn.style.color = '#2e5aac !important';
-						btn.disabled = false;
-					}, 2000);
-				} else {
-					alert('Please wait ' + response.data.time_remaining + ' minutes before refreshing again.');
-					btn.textContent = originalText;
-					btn.disabled = false;
-				}
+					aeroRenderDiagnostics(response.data);
+					aeroRenderStats(response.data);
+					aeroRenderWarmth(response.data.warmer);
+				} else { aeroDiagError(); }
 			},
-			error: function() {
-				alert('Failed to refresh debug information. Please try again.');
-				btn.textContent = originalText;
-				btn.disabled = false;
-			}
+			error: aeroDiagError
 		});
-	}
+
+		function aeroDiagError() {
+			$('#aero-diag-list').html('<div class="aero-diag-row"><span class="aero-dot err"></span><span class="aero-diag-label"><?php echo esc_js( __( 'Failed to load diagnostics. Refresh the page to retry.', 'aero' ) ); ?></span></div>');
+			$('#aero-diag-score').text('—');
+			$('#aero-css-count, #aero-js-count, #aero-total-size, #aero-bc-ttl, #aero-last-flush, #aero-donut-total').text('—');
+		}
+
+		function aeroRenderDiagnostics(data) {
+			var checks = [
+				{ label: 'WP Stratos Hosting',               ok: data.hosting.is_wpstratos,  hint: data.hosting.is_wpstratos ? 'Platform detected' : 'Not detected' },
+				{ label: 'Object Cache (object-cache.php)',  ok: data.dropins.object_cache,  hint: data.dropins.object_cache ? 'Drop-in present' : 'Drop-in missing' },
+				{ label: 'Page Cache (advanced-cache.php)',  ok: data.dropins.advanced_cache, hint: data.dropins.advanced_cache ? 'Drop-in present' : 'Drop-in missing' },
+				{ label: 'Batcache Configuration',           ok: data.batcache.exists,       hint: data.batcache.exists ? ('Max Age ' + data.batcache.values.max_age + 's · Times ' + data.batcache.values.times) : 'Not configured — see the Cache screen' },
+				{ label: 'Edge Cache',                       ok: data.edge.enabled,          hint: data.edge.available ? (data.edge.enabled ? 'Enabled' : 'Available but disabled — see the Edge Cache screen') : 'Edge Cache plugin not present', warn: data.edge.available && !data.edge.enabled },
+				{ label: 'Scheduled Cache Clearing',         ok: data.schedule.enabled,      hint: data.schedule.enabled ? ('Next run ' + data.schedule.next) : 'Disabled — optional, see Purge & Schedule', warn: !data.schedule.enabled, optional: true }
+			];
+			var html = '', passed = 0, scored = 0;
+			checks.forEach(function(c) {
+				if (!c.optional) { scored++; if (c.ok) passed++; }
+				var dot = c.ok ? 'ok' : (c.warn ? 'warn' : 'err');
+				html += '<div class="aero-diag-row">'
+					 +  '<span class="aero-dot ' + dot + '"></span>'
+					 +  '<span class="aero-diag-label">' + c.label + '</span>'
+					 +  '<span class="aero-diag-hint">' + c.hint + '</span>'
+					 +  '</div>';
+			});
+			$('#aero-diag-list').html(html);
+			$('#aero-diag-score').html(passed + '/' + scored + ' <span>PASSING</span>');
+			$('#aero-diag-score').addClass(passed === scored ? 'all-pass' : 'has-fail');
+			if (!data.hosting.is_wpstratos) { $('#aero-upgrade-notice').show(); }
+		}
+
+		function aeroRenderStats(data) {
+			var st = data.cache_stats;
+			$('#aero-css-count').text(st.css_files);
+			$('#aero-js-count').text(st.js_files);
+			$('#aero-total-size').text(st.total_size);
+			$('#aero-bc-ttl').text(data.batcache.exists && data.batcache.values.max_age ? aeroHuman(data.batcache.values.max_age) : '—');
+			$('#aero-last-flush').text(data.last_full_flush || 'Never');
+			$('#aero-donut-total').text(st.total_size);
+			$('#aero-legend-css').text(st.css_size);
+			$('#aero-legend-js').text(st.js_size);
+
+			// Donut: CSS + JS share of total bytes
+			var total = st.css_size_bytes + st.js_size_bytes;
+			var C = 2 * Math.PI * 48; // circumference
+			var cssFrac = total > 0 ? st.css_size_bytes / total : 0;
+			var jsFrac  = total > 0 ? st.js_size_bytes  / total : 0;
+			var gap = total > 0 && cssFrac > 0 && jsFrac > 0 ? 0.005 : 0;
+			var cssEl = document.getElementById('aero-donut-css');
+			var jsEl  = document.getElementById('aero-donut-js');
+			cssEl.style.strokeDasharray = (Math.max(cssFrac - gap, 0) * C) + ' ' + C;
+			cssEl.style.strokeDashoffset = 0;
+			jsEl.style.strokeDasharray  = (Math.max(jsFrac - gap, 0) * C) + ' ' + C;
+			jsEl.style.strokeDashoffset  = -(cssFrac * C);
+		}
+
+		function aeroRenderWarmth(w) {
+			if (!w || !w.available) { return; }
+			var el = document.getElementById('aero-warmth');
+			el.style.display = '';
+
+			var dot = document.getElementById('aero-warmth-dot');
+			var state = document.getElementById('aero-warmth-state');
+			var meta = document.getElementById('aero-warmth-meta');
+
+			if (!w.enabled) {
+				dot.className = 'aero-dot idle';
+				state.textContent = '<?php echo esc_js( __( 'Disabled', 'aero' ) ); ?>';
+				meta.innerHTML = '<?php echo esc_js( __( 'Enable it to rebuild the cache automatically after every flush.', 'aero' ) ); ?>';
+				return;
+			}
+
+			var total = w.total || 0;
+			var done = w.done || 0, failed = w.failed || 0;
+			var pending = Math.max(0, total - done - failed);
+
+			if (w.running) {
+				dot.className = 'aero-dot warn pulse';
+				state.textContent = total > 0 ? '<?php echo esc_js( __( 'Warming now…', 'aero' ) ); ?>' : '<?php echo esc_js( __( 'Collecting URLs…', 'aero' ) ); ?>';
+			} else if (total > 0) {
+				dot.className = 'aero-dot ' + (failed > 0 ? 'warn' : 'ok');
+				state.textContent = '<?php echo esc_js( __( 'Last run complete', 'aero' ) ); ?>';
+			} else {
+				dot.className = 'aero-dot idle';
+				state.textContent = '<?php echo esc_js( __( 'Idle — no run yet', 'aero' ) ); ?>';
+			}
+
+			var pct = function(n) { return total > 0 ? (n / total * 100) + '%' : '0%'; };
+			document.getElementById('aero-warmth-done').style.width = pct(done);
+			document.getElementById('aero-warmth-failed').style.width = pct(failed);
+			document.getElementById('aero-warmth-pending').style.width = pct(pending);
+
+			if (total > 0) {
+				var bits = ['<em>' + done + '/' + total + '</em> <?php echo esc_js( __( 'warmed', 'aero' ) ); ?>'];
+				if (failed) { bits.push('<em>' + failed + '</em> <?php echo esc_js( __( 'failed', 'aero' ) ); ?>'); }
+				if (pending) { bits.push('<em>' + pending + '</em> <?php echo esc_js( __( 'pending', 'aero' ) ); ?>'); }
+				if (w.started) { bits.push(new Date(w.started * 1000).toUTCString().replace(':00 GMT', ' UTC') + (w.reason ? ' · ' + w.reason : '')); }
+				meta.innerHTML = bits.join('<span style="opacity:.4"> · </span>');
+			} else {
+				meta.innerHTML = '';
+			}
+		}
+
+		function aeroHuman(s) {
+			s = parseInt(s);
+			if (s % 86400 === 0) return (s / 86400) + (s === 86400 ? ' day' : ' days');
+			if (s % 3600 === 0) return (s / 3600) + ' hr';
+			if (s % 60 === 0) return (s / 60) + ' min';
+			return s + ' sec';
+		}
+	});
 	</script>
-	</div>
+
+	<!-- ═══ Settings form ═══ -->
+	<form method="post" name="options_form">
+		<?php wp_nonce_field( 'aero_settings_nonce' ); ?>
+		<input type="hidden" name="aero_submit_hidden" value="Y">
+
+		<div class="aero-acc" data-open="1">
+			<button type="button" class="aero-acc-head">
+				<span class="aero-acc-title"><?php esc_html_e( 'Core Optimizations', 'aero' ); ?></span>
+				<span class="aero-acc-aside"><?php esc_html_e( 'recommended — enable all', 'aero' ); ?></span>
+				<svg class="aero-acc-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+			</button>
+			<div class="aero-acc-body"><div class="aero-acc-inner">
+			<div class="aero-check-list">
+				<?php
+				$opt_row( 'aero_combine_css', $combine_css_val, __( 'Minify & Cache CSS', 'aero' ), __( 'Minifies every stylesheet and serves it from Aero\'s local cache.', 'aero' ) );
+				$opt_row( 'aero_combine_js', $combine_js_val, __( 'Minify & Cache JavaScript', 'aero' ), __( 'Minifies every script and serves it from Aero\'s local cache.', 'aero' ) );
+				$opt_row( 'aero_compress_html', $compress_html_val, __( 'Compress HTML', 'aero' ), __( 'Strips whitespace and comments from the final HTML output.', 'aero' ) );
+				$opt_row( 'aero_defer_js', $defer_js_val, __( 'Defer JavaScript', 'aero' ), __( 'Defers non-critical JS. jQuery is excluded automatically; add more in Exclusions below.', 'aero' ) );
+				?>
+			</div>
+		</div></div></div>
+
+		<div class="aero-acc" data-open="1">
+			<button type="button" class="aero-acc-head">
+				<span class="aero-acc-title"><?php esc_html_e( 'Advanced Performance', 'aero' ); ?></span>
+				<svg class="aero-acc-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+			</button>
+			<div class="aero-acc-body"><div class="aero-acc-inner">
+			<div class="aero-check-list">
+				<?php
+				$opt_row( 'aero_preload_critical', $preload_critical_val, __( 'Preload Critical Resources', 'aero' ), __( 'Preloads the first critical stylesheets so above-the-fold rendering starts sooner.', 'aero' ) );
+				?>
+			</div>
+		</div></div></div>
+
+		<!-- ═══ Delivery Optimization ═══ -->
+		<div class="aero-acc" data-open="1">
+			<button type="button" class="aero-acc-head">
+				<span class="aero-acc-title"><?php esc_html_e( 'Delivery Optimization', 'aero' ); ?></span>
+				<span class="aero-acc-aside"><?php esc_html_e( 'where PageSpeed scores are won', 'aero' ); ?></span>
+				<svg class="aero-acc-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+			</button>
+			<div class="aero-acc-body"><div class="aero-acc-inner">
+
+			<div class="aero-check-list">
+				<label class="aero-check-row aero-check-row-simple">
+					<input type="checkbox" name="aero_preload_lcp" <?php checked( get_option( 'aero_preload_lcp', 'on' ), 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Preload the LCP Image', 'aero' ); ?> <span class="aero-tag ok"><?php esc_html_e( 'Safe', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'Detects the likely Largest-Contentful-Paint image, preloads it with fetchpriority="high", and removes lazy-loading from it. Directly answers PSI\'s "LCP image was lazily loaded / discovered late".', 'aero' ); ?></span>
+					</span>
+				</label>
+				<label class="aero-check-row aero-check-row-simple">
+					<input type="checkbox" name="aero_delay_js" <?php checked( get_option( 'aero_delay_js', 'off' ), 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Delay JavaScript Until Interaction', 'aero' ); ?> <span class="aero-tag warn"><?php esc_html_e( 'High impact — test', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'No JS loads until the visitor moves, scrolls, taps or types — then everything restores in order. Lab tools never interact, so Total Blocking Time collapses (often 1–3s). Test menus and sliders after enabling; exclude anything needed instantly below.', 'aero' ); ?></span>
+					</span>
+				</label>
+				<label class="aero-check-row aero-check-row-simple">
+					<input type="checkbox" name="aero_async_css" <?php checked( get_option( 'aero_async_css', 'off' ), 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Load CSS Asynchronously', 'aero' ); ?> <span class="aero-tag warn"><?php esc_html_e( 'Pair with Critical CSS', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'Stylesheets stop blocking the first paint (media="print" swap with a no-JS fallback). Without Critical CSS below, the page may flash unstyled for a moment — add your above-the-fold rules there to prevent it.', 'aero' ); ?></span>
+					</span>
+				</label>
+			</div>
+
+			<div class="aero-field-grid aero-field-grid-3">
+				<div class="aero-field">
+					<label class="aero-label" for="aero_delay_js_timeout"><?php esc_html_e( 'Delay Fallback Timeout', 'aero' ); ?></label>
+					<select id="aero_delay_js_timeout" class="aero-input" name="aero_delay_js_timeout">
+						<option value="0" <?php selected( (int) get_option( 'aero_delay_js_timeout', 0 ), 0 ); ?>><?php esc_html_e( 'None — wait for interaction (best scores)', 'aero' ); ?></option>
+						<option value="5" <?php selected( (int) get_option( 'aero_delay_js_timeout', 0 ), 5 ); ?>><?php esc_html_e( '5 seconds', 'aero' ); ?></option>
+						<option value="10" <?php selected( (int) get_option( 'aero_delay_js_timeout', 0 ), 10 ); ?>><?php esc_html_e( '10 seconds', 'aero' ); ?></option>
+					</select>
+					<p class="aero-hint"><?php esc_html_e( 'A timeout loads JS even without interaction — useful so analytics still count passive visitors, at a small score cost.', 'aero' ); ?></p>
+				</div>
+				<div class="aero-field">
+					<label class="aero-label" for="aero_delay_js_excludes"><?php esc_html_e( 'Exclude from Delay', 'aero' ); ?></label>
+					<textarea id="aero_delay_js_excludes" name="aero_delay_js_excludes" class="aero-input aero-code-textarea" rows="4" placeholder="cookie-banner&#10;instant-search"><?php echo esc_textarea( get_option( 'aero_delay_js_excludes', '' ) ); ?></textarea>
+					<p class="aero-hint"><?php esc_html_e( 'One per line — matched against script URLs AND inline code. Scripts can also opt out with a data-aero-nodelay attribute.', 'aero' ); ?></p>
+				</div>
+				<div class="aero-field">
+					<label class="aero-label" for="aero_async_css_excludes"><?php esc_html_e( 'Exclude from Async CSS', 'aero' ); ?></label>
+					<textarea id="aero_async_css_excludes" name="aero_async_css_excludes" class="aero-input aero-code-textarea" rows="4" placeholder="above-fold.css"><?php echo esc_textarea( get_option( 'aero_async_css_excludes', '' ) ); ?></textarea>
+					<p class="aero-hint"><?php esc_html_e( 'Excluded stylesheets stay render-blocking. Links can also opt out with data-aero-noasync.', 'aero' ); ?></p>
+				</div>
+			</div>
+
+			<div class="aero-field">
+				<label class="aero-label" for="aero_critical_css"><?php esc_html_e( 'Critical CSS', 'aero' ); ?></label>
+				<textarea id="aero_critical_css" name="aero_critical_css" class="aero-input aero-code-textarea" rows="6" placeholder="/* Above-the-fold rules: header, hero, first-view typography */"><?php echo esc_textarea( get_option( 'aero_critical_css', '' ) ); ?></textarea>
+				<p class="aero-hint"><?php esc_html_e( 'Inlined into <head> when Async CSS is on, so the first paint is styled before any stylesheet arrives. Generate with a critical-CSS tool, or paste your header/hero rules.', 'aero' ); ?></p>
+			</div>
+
+			</div></div>
+		</div>
+
+		<!-- ═══ Font Optimization ═══ -->
+		<div class="aero-acc" data-open="0">
+			<button type="button" class="aero-acc-head">
+				<span class="aero-acc-title"><?php esc_html_e( 'Font Optimization', 'aero' ); ?></span>
+				<span class="aero-acc-aside"><?php esc_html_e( 'kills the web-font waterfall', 'aero' ); ?></span>
+				<svg class="aero-acc-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+			</button>
+			<div class="aero-acc-body"><div class="aero-acc-inner">
+			<p class="aero-hint" style="margin:0 0 14px;max-width:680px;">
+				<?php esc_html_e( 'Remote fonts force two serial cross-origin round trips before any text renders — the single biggest PageSpeed penalty on most sites. Aero downloads Google Fonts once, serves them same-origin, inlines the CSS, and preloads the primary faces.', 'aero' ); ?>
+			</p>
+
+			<?php
+			$fstats = function_exists( 'aero_fonts_cache_stats' ) ? aero_fonts_cache_stats() : array( 'sheets' => 0, 'files' => 0, 'bytes' => 0 );
+			?>
+			<div class="aero-status-row">
+				<span class="aero-dot <?php echo $fstats['sheets'] > 0 ? 'ok' : 'idle'; ?>"></span>
+				<span class="aero-status-strong"><?php esc_html_e( 'Local font cache', 'aero' ); ?></span>
+				<span>
+					<?php
+					if ( $fstats['sheets'] > 0 ) {
+						printf(
+							/* translators: 1: stylesheets, 2: files, 3: size */
+							esc_html__( '%1$d stylesheet(s) localized · %2$d font file(s) · %3$s', 'aero' ),
+							(int) $fstats['sheets'],
+							(int) $fstats['files'],
+							esc_html( aero_format_bytes( $fstats['bytes'] ) )
+						);
+					} else {
+						esc_html_e( 'Empty — populated automatically on the first frontend visit after enabling.', 'aero' );
+					}
+					?>
+				</span>
+				<span class="aero-status-meta"><?php esc_html_e( 'Cleared with "Clear Minified Cache"', 'aero' ); ?></span>
+			</div>
+
+			<?php
+			$fdet    = function_exists( 'aero_fonts_get_detection' ) ? aero_fonts_get_detection() : null;
+			$g_mode  = $fdet ? $fdet['google']['mode'] : 'unknown';
+			$tk_mode = $fdet ? $fdet['typekit']['mode'] : 'unknown';
+			$f_seen  = $fdet ? max( (int) $fdet['google']['seen'], (int) $fdet['typekit']['seen'] ) : 0;
+			?>
+			<div class="aero-status-row">
+				<span class="aero-dot <?php echo ( 'unknown' === $g_mode ) ? 'idle' : ( 'remote' === $g_mode ? 'warn' : 'ok' ); ?>"></span>
+				<span class="aero-status-strong"><?php esc_html_e( 'Detected on frontend', 'aero' ); ?></span>
+				<span>
+					<?php if ( 'unknown' === $g_mode ) : ?>
+						<?php esc_html_e( 'No data yet — recorded on the next frontend visit.', 'aero' ); ?>
+					<?php else : ?>
+						<?php if ( 'localized' === $g_mode ) : ?>
+							<span class="aero-tag ok"><?php esc_html_e( 'Google Fonts — Localized', 'aero' ); ?></span>
+						<?php elseif ( 'remote' === $g_mode ) : ?>
+							<span class="aero-tag warn"><?php esc_html_e( 'Google Fonts — Remote', 'aero' ); ?></span>
+						<?php else : ?>
+							<span class="aero-tag"><?php esc_html_e( 'Google Fonts — Not used', 'aero' ); ?></span>
+						<?php endif; ?>
+						<?php if ( 'detected' === $tk_mode ) : ?>
+							<span class="aero-tag ok"><?php esc_html_e( 'Adobe TypeKit — Preconnect applied', 'aero' ); ?></span>
+						<?php else : ?>
+							<span class="aero-tag"><?php esc_html_e( 'Adobe TypeKit — Not used', 'aero' ); ?></span>
+						<?php endif; ?>
+					<?php endif; ?>
+				</span>
+				<?php if ( $f_seen ) : ?>
+					<span class="aero-status-meta"><?php esc_html_e( 'Last check:', 'aero' ); ?> <?php echo esc_html( gmdate( 'j M Y, g:ia', $f_seen ) ); ?> UTC</span>
+				<?php endif; ?>
+			</div>
+			<p class="aero-hint" style="margin:-12px 0 14px;"><?php esc_html_e( 'Preconnect and preload hints are emitted per page, only for providers actually present on that page — a preconnect to an origin the page never contacts wastes a connection slot and slows the real critical path.', 'aero' ); ?></p>
+
+			<div class="aero-check-list">
+				<?php
+				$opt_row( 'aero_optimize_fonts', get_option( 'aero_optimize_fonts', 'on' ), __( 'Optimize Font Loading', 'aero' ), __( 'Master switch for the font engine. Enforces font-display: swap everywhere so text never blocks on a font download.', 'aero' ) );
+				$opt_row( 'aero_fonts_local_google', get_option( 'aero_fonts_local_google', 'on' ), __( 'Self-Host Google Fonts', 'aero' ), __( 'Downloads Google Fonts into Aero\'s cache and serves them from your own domain — both external origins disappear from the critical path. Falls back to remote automatically if a download fails.', 'aero' ) );
+				$opt_row( 'aero_fonts_inline_css', get_option( 'aero_fonts_inline_css', 'on' ), __( 'Inline Font CSS', 'aero' ), __( 'Embeds the localized @font-face rules directly in <head>, removing the render-blocking stylesheet request entirely.', 'aero' ) );
+				$opt_row( 'aero_fonts_preconnect', get_option( 'aero_fonts_preconnect', 'on' ), __( 'Preconnect Hints', 'aero' ), __( 'Warms connections to any font origin that remains remote (fonts.gstatic.com, Adobe Fonts) so the download starts 100–500ms sooner.', 'aero' ) );
+				$opt_row( 'aero_fonts_preload', get_option( 'aero_fonts_preload', 'on' ), __( 'Preload Primary Fonts', 'aero' ), __( 'Preloads up to two latin woff2 faces so text fonts download in parallel with CSS instead of after it.', 'aero' ) );
+				?>
+			</div>
+
+			<div class="aero-check-list" style="margin-top:2px;">
+				<label class="aero-check-row aero-check-row-simple aero-check-row-danger">
+					<input type="checkbox" name="aero_fonts_disable_google" <?php checked( get_option( 'aero_fonts_disable_google', 'off' ), 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Disable Google Fonts Entirely', 'aero' ); ?> <span class="aero-tag warn"><?php esc_html_e( 'Changes appearance', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'Strips every Google Fonts request — the browser falls back to system fonts. Only for sites deliberately using a system font stack. Overrides all options above.', 'aero' ); ?></span>
+					</span>
+				</label>
+			</div>
+			<p class="aero-hint"><?php esc_html_e( 'Adobe Fonts (TypeKit) note: kit CSS is licensed and dynamically subset, so it cannot be self-hosted — Aero applies preconnect and preload to it instead.', 'aero' ); ?></p>
+		</div></div>
+		</div>
+
+		<!-- ═══ Exclusions ═══ -->
+		<div class="aero-acc" data-open="0">
+			<button type="button" class="aero-acc-head">
+				<span class="aero-acc-title"><?php esc_html_e( 'Exclusions', 'aero' ); ?></span>
+				<span class="aero-acc-aside"><?php esc_html_e( 'compatibility escape hatches', 'aero' ); ?></span>
+				<svg class="aero-acc-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+			</button>
+			<div class="aero-acc-body"><div class="aero-acc-inner">
+			<p class="aero-hint" style="margin:0 0 14px;max-width:680px;">
+				<?php esc_html_e( 'If a specific file misbehaves when optimized, exclude it here instead of turning the whole feature off. One entry per line — each is matched as a case-insensitive fragment of the file URL (e.g. "slider-pro", "themes/mytheme/app.js").', 'aero' ); ?>
+			</p>
+			<div class="aero-field-grid aero-field-grid-3">
+				<div class="aero-field">
+					<label class="aero-label" for="aero_exclude_minify_css"><?php esc_html_e( 'Exclude from CSS Minification', 'aero' ); ?></label>
+					<textarea id="aero_exclude_minify_css" name="aero_exclude_minify_css" class="aero-input aero-code-textarea" rows="4" placeholder="fancy-slider&#10;/plugins/broken-plugin/"><?php echo esc_textarea( get_option( 'aero_exclude_minify_css', '' ) ); ?></textarea>
+				</div>
+				<div class="aero-field">
+					<label class="aero-label" for="aero_exclude_minify_js"><?php esc_html_e( 'Exclude from JS Minification', 'aero' ); ?></label>
+					<textarea id="aero_exclude_minify_js" name="aero_exclude_minify_js" class="aero-input aero-code-textarea" rows="4" placeholder="maps-widget.js"><?php echo esc_textarea( get_option( 'aero_exclude_minify_js', '' ) ); ?></textarea>
+				</div>
+				<div class="aero-field">
+					<label class="aero-label" for="aero_exclude_defer"><?php esc_html_e( 'Exclude from JS Defer', 'aero' ); ?></label>
+					<textarea id="aero_exclude_defer" name="aero_exclude_defer" class="aero-input aero-code-textarea" rows="4" placeholder="inline-critical.js"><?php echo esc_textarea( get_option( 'aero_exclude_defer', '' ) ); ?></textarea>
+					<p class="aero-hint"><?php esc_html_e( 'jQuery is always excluded automatically.', 'aero' ); ?></p>
+				</div>
+			</div>
+		</div></div>
+		</div>
+
+		<!-- ═══ WordPress Bloat ═══ -->
+		<?php $bloat = aero_bloat_opts(); ?>
+		<div class="aero-acc" data-open="0">
+			<button type="button" class="aero-acc-head">
+				<span class="aero-acc-title"><?php esc_html_e( 'WordPress Bloat', 'aero' ); ?></span>
+				<span class="aero-acc-aside"><?php esc_html_e( 'trim what core loads on every page', 'aero' ); ?></span>
+				<svg class="aero-acc-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+			</button>
+			<div class="aero-acc-body"><div class="aero-acc-inner">
+
+			<div class="aero-check-list">
+				<label class="aero-check-row aero-check-row-simple">
+					<input type="checkbox" name="aero_bloat[emojis]" <?php checked( $bloat['emojis'], 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Remove Emoji Script', 'aero' ); ?> <span class="aero-tag ok"><?php esc_html_e( 'Safe', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'Drops ~15KB of emoji-detection JS/CSS loaded on every page. Emojis still render — every modern browser supports them natively.', 'aero' ); ?></span>
+					</span>
+				</label>
+				<label class="aero-check-row aero-check-row-simple">
+					<input type="checkbox" name="aero_bloat[head_cleanup]" <?php checked( $bloat['head_cleanup'], 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Clean Up <head>', 'aero' ); ?> <span class="aero-tag ok"><?php esc_html_e( 'Safe', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'Removes the RSD link, Windows Live Writer manifest, shortlink tag, and the WordPress version meta (a security win too).', 'aero' ); ?></span>
+					</span>
+				</label>
+			</div>
+
+			<div class="aero-check-list" style="margin-top:2px;">
+				<label class="aero-check-row aero-check-row-simple">
+					<input type="checkbox" name="aero_bloat[embeds]" <?php checked( $bloat['embeds'], 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Disable Embeds', 'aero' ); ?> <span class="aero-tag"><?php esc_html_e( 'Review', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'Removes wp-embed.js and oEmbed discovery links. Keep OFF if other sites embed your posts as rich cards.', 'aero' ); ?></span>
+					</span>
+				</label>
+				<label class="aero-check-row aero-check-row-simple">
+					<input type="checkbox" name="aero_bloat[jquery_migrate]" <?php checked( $bloat['jquery_migrate'], 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Remove jQuery Migrate', 'aero' ); ?> <span class="aero-tag"><?php esc_html_e( 'Review', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'Frontend only. Safe on modern themes; needed only by plugins written for pre-2016 jQuery. Test after enabling.', 'aero' ); ?></span>
+					</span>
+				</label>
+				<label class="aero-check-row aero-check-row-simple">
+					<input type="checkbox" name="aero_bloat[dashicons]" <?php checked( $bloat['dashicons'], 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Remove Dashicons for Visitors', 'aero' ); ?> <span class="aero-tag"><?php esc_html_e( 'Review', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'Dequeues the ~46KB admin icon font for logged-out visitors. Keep OFF if your theme shows Dashicons on the frontend.', 'aero' ); ?></span>
+					</span>
+				</label>
+				<label class="aero-check-row aero-check-row-simple">
+					<input type="checkbox" name="aero_bloat[xmlrpc]" <?php checked( $bloat['xmlrpc'], 'on' ); ?> />
+					<span class="aero-check-main">
+						<span class="aero-check-title"><?php esc_html_e( 'Disable XML-RPC', 'aero' ); ?> <span class="aero-tag"><?php esc_html_e( 'Review', 'aero' ); ?></span></span>
+						<span class="aero-check-sub"><?php esc_html_e( 'Blocks a common brute-force target and removes the X-Pingback header. Keep OFF if you use Jetpack or the WordPress mobile apps.', 'aero' ); ?></span>
+					</span>
+				</label>
+			</div>
+
+			<div class="aero-field-grid aero-field-grid-3" style="margin-top:18px;">
+				<div class="aero-field">
+					<label class="aero-label" for="aero_bloat_heartbeat"><?php esc_html_e( 'Heartbeat API', 'aero' ); ?></label>
+					<select id="aero_bloat_heartbeat" class="aero-input" name="aero_bloat[heartbeat]">
+						<option value="default" <?php selected( $bloat['heartbeat'], 'default' ); ?>><?php esc_html_e( 'WordPress default', 'aero' ); ?></option>
+						<option value="frontend" <?php selected( $bloat['heartbeat'], 'frontend' ); ?>><?php esc_html_e( 'Disable on frontend (recommended)', 'aero' ); ?></option>
+						<option value="disable" <?php selected( $bloat['heartbeat'], 'disable' ); ?>><?php esc_html_e( 'Disable everywhere', 'aero' ); ?></option>
+					</select>
+					<p class="aero-hint"><?php esc_html_e( 'Frontend heartbeat polling is almost never needed. "Everywhere" also stops post-lock warnings in the editor.', 'aero' ); ?></p>
+				</div>
+				<div class="aero-field">
+					<label class="aero-label" for="aero_bloat_autosave"><?php esc_html_e( 'Autosave Interval', 'aero' ); ?></label>
+					<select id="aero_bloat_autosave" class="aero-input" name="aero_bloat[autosave]">
+						<option value="60" <?php selected( $bloat['autosave'], '60' ); ?>><?php esc_html_e( '1 minute (default)', 'aero' ); ?></option>
+						<option value="120" <?php selected( $bloat['autosave'], '120' ); ?>><?php esc_html_e( '2 minutes', 'aero' ); ?></option>
+						<option value="300" <?php selected( $bloat['autosave'], '300' ); ?>><?php esc_html_e( '5 minutes', 'aero' ); ?></option>
+					</select>
+					<p class="aero-hint"><?php esc_html_e( 'Fewer editor autosave requests = less admin-side load.', 'aero' ); ?></p>
+				</div>
+				<div class="aero-field">
+					<label class="aero-label" for="aero_bloat_revisions"><?php esc_html_e( 'Post Revisions Limit', 'aero' ); ?></label>
+					<input type="number" min="0" id="aero_bloat_revisions" class="aero-input" name="aero_bloat[revisions]" value="<?php echo esc_attr( $bloat['revisions'] ); ?>" placeholder="<?php esc_attr_e( 'Unlimited', 'aero' ); ?>" />
+					<p class="aero-hint"><?php esc_html_e( 'Keeps the posts table lean. Empty = WordPress default (unlimited). 5–10 is plenty for most sites.', 'aero' ); ?></p>
+				</div>
+			</div>
+		</div></div>
+		</div>
+
+		<div class="aero-acc" data-open="0">
+			<button type="button" class="aero-acc-head">
+				<span class="aero-acc-title"><?php esc_html_e( 'Custom CSS', 'aero' ); ?></span>
+				<svg class="aero-acc-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+			</button>
+			<div class="aero-acc-body"><div class="aero-acc-inner">
+			<div class="aero-field">
+				<label class="aero-label" for="aero_custom_css_normal"><?php esc_html_e( 'Site-wide Custom CSS', 'aero' ); ?></label>
+				<textarea name="aero_custom_css_normal" id="aero_custom_css_normal" class="aero-input aero-code-textarea" rows="7"
+					placeholder="/* Example: Hide elements that break layout */&#10;.problematic-element {&#10;    display: none !important;&#10;}"><?php echo esc_textarea( get_option( 'aero_custom_css_normal', '' ) ); ?></textarea>
+				<p class="aero-hint"><?php esc_html_e( 'Injected on the frontend for all regular visitors. Guest-Mode-only CSS lives on the Experimental screen.', 'aero' ); ?></p>
+			</div>
+			</div></div>
+		</div>
+
+		<script>
+		document.querySelectorAll('.aero-acc-head').forEach(function(head) {
+			head.addEventListener('click', function() {
+				var acc = head.closest('.aero-acc');
+				acc.setAttribute('data-open', acc.getAttribute('data-open') === '1' ? '0' : '1');
+			});
+		});
+		</script>
+
+		<div class="aero-actions">
+			<button type="submit" name="submit" class="aero-btn aero-btn-primary"><?php esc_html_e( 'Save Changes', 'aero' ); ?></button>
+			<button type="submit" name="aero_clear_minified" class="aero-btn aero-btn-ghost"><?php esc_html_e( 'Clear Minified Cache', 'aero' ); ?></button>
+		</div>
+	</form>
 	<?php
 }
 
@@ -1523,11 +1477,37 @@ function aero_activate_plugin() {
 			aero_add_batcache_config();
 		}
 	}
+
+	// Image Optimizer: create the aero-nextgen tree and (re)write the image
+	// rewrite rules when an .htaccess delivery mode is active.
+	if ( function_exists( 'aero_io_activate' ) ) {
+		aero_io_activate();
+	}
 }
 register_activation_hook( __FILE__, 'aero_activate_plugin' );
 
 function aero_deactivate_plugin() {
 	delete_option( 'aero_plugin_version' );
+
+	// Clear the Aero Cache Manager scheduled flush
+	if ( function_exists( 'aero_cm_clear_schedule' ) ) {
+		aero_cm_clear_schedule();
+	}
+	if ( defined( 'AERO_CW_BATCH_HOOK' ) ) {
+		wp_clear_scheduled_hook( AERO_CW_BATCH_HOOK );
+		wp_clear_scheduled_hook( AERO_CW_SCHEDULE_HOOK );
+		wp_clear_scheduled_hook( AERO_CW_MICRO_HOOK );
+		wp_clear_scheduled_hook( AERO_CW_EDGE_HOOK );
+		delete_option( 'aero_cw_running' );
+		delete_option( 'aero_cw_micro_queue' );
+	}
+
+	// Image Optimizer: pull the image rewrite rules back out of .htaccess so
+	// image URLs keep resolving to originals while the plugin is inactive.
+	// Generated files are left in place — deactivation is not uninstall.
+	if ( function_exists( 'aero_io_deactivate' ) ) {
+		aero_io_deactivate();
+	}
 }
 register_deactivation_hook( __FILE__, 'aero_deactivate_plugin' );
 
@@ -1636,16 +1616,18 @@ function aero_minify_html( $buffer ) {
 		Minify_Loader::register();
 	}
 
-	if ( get_option('aero_combine_js', 1 ) === 'on') {
-		$buffer = Minify_HTML::minify( $buffer, array(
-			'jsMinifier' => array( 'JSMin', 'minify' )
-		));
+	// Single-pass HTML minification: one document parse with whichever
+	// inline minifiers are enabled. (Previously this ran Minify_HTML twice —
+	// two full parses of the entire page on every uncached request.)
+	$minify_opts = array();
+	if ( get_option( 'aero_combine_js', 1 ) === 'on' ) {
+		$minify_opts['jsMinifier'] = array( 'JSMin', 'minify' );
 	}
-
-	if (get_option( 'aero_combine_css', 1 ) === 'on') {
-		$buffer = Minify_HTML::minify( $buffer, array(
-			'cssMinifier' => array( 'Minify_CSS', 'minify' )
-		));
+	if ( get_option( 'aero_combine_css', 1 ) === 'on' ) {
+		$minify_opts['cssMinifier'] = array( 'Minify_CSS', 'minify' );
+	}
+	if ( ! empty( $minify_opts ) ) {
+		$buffer = Minify_HTML::minify( $buffer, $minify_opts );
 	}
 
 	// Process assets
@@ -1662,11 +1644,11 @@ function aero_minify_html( $buffer ) {
 	$final = strlen( $buffer );
 	$savings = ($initial > 0) ? round((($initial - $final) / $initial * 100), 3) : 0;
 
-	// Append comment directly to buffer to ensure it's always present
 	if ( $savings > 0 ) {
+		global $aero_minify_comment;
 		$guest_mode_level = aero_get_guest_mode_level();
 		$mode = $guest_mode_level ? ' [Guest Mode: ' . ucfirst($guest_mode_level) . ']' : '';
-		$buffer .= PHP_EOL . '<!-- Optimized by Aero v' . AERO_PLUGIN_VERSION_NUM . $mode . ' | Saved: ' . $savings . '% | https://wpstratos.com -->';
+		$aero_minify_comment = PHP_EOL . '<!-- Optimized by Aero v' . AERO_PLUGIN_VERSION_NUM . $mode . ' | Saved: ' . $savings . '% | https://wpstratos.com -->';
 	}
 
 	return $buffer;
@@ -1901,6 +1883,25 @@ function aero_process_html_assets( $html ) {
 				}
 				
 				if ( $is_font_provider ) {
+					// Prefer Aero's LOCALIZED copy for Google Fonts: the remote
+					// fetch below inlines CSS whose @font-face src still points
+					// at fonts.gstatic.com — the font FILES stay on the CDN and
+					// PageSpeed keeps flagging them. The localized entry's CSS
+					// references same-origin files instead.
+					if ( function_exists( 'aero_fonts_localize' ) &&
+						 function_exists( 'aero_fonts_opt' ) &&
+						 aero_fonts_opt( 'aero_fonts_local_google' ) &&
+						 stripos( $link_url, 'fonts.googleapis.com/css' ) !== false ) {
+						$local_entry = aero_fonts_localize( html_entity_decode( $link_url ) );
+						if ( $local_entry && '' !== $local_entry['inline'] ) {
+							$inlined_fonts_css .= "/* Localized Font (same-origin files): " . $link_url . " */\n";
+							$inlined_fonts_css .= $local_entry['inline'] . "\n\n";
+							$font_links_removed++;
+							$html = str_replace( $all_links[0][$index], '', $html );
+							continue;
+						}
+					}
+
 					// Fetch the font CSS with proper user agent (important for Google Fonts)
 					$response = wp_remote_get( $link_url, array( 
 						'timeout' => 10,
@@ -2036,8 +2037,17 @@ function aero_process_html_assets( $html ) {
 	
 	// NORMAL MODE - Real optimizations for actual users
 	
-	// Optimize fonts in HTML
-	$html = aero_optimize_fonts( $html );
+	// Optimize fonts in HTML (new engine: self-host, inline, preconnect,
+	// preload — falls back to the legacy swap-param helper if absent)
+	$html = function_exists( 'aero_fonts_process_html' )
+		? aero_fonts_process_html( $html )
+		: aero_optimize_fonts( $html );
+
+	// Delivery optimization: LCP preload, async CSS, delay JS — applied
+	// last so they wrap the final (minified/localized) asset URLs.
+	if ( function_exists( 'aero_delivery_process_html' ) ) {
+		$html = aero_delivery_process_html( $html );
+	}
 	
 	// Process CSS
 	if ( get_option( 'aero_combine_css', 1 ) === 'on' ) {
@@ -2047,8 +2057,11 @@ function aero_process_html_assets( $html ) {
 				$full_match = $matches[0];
 				$css_url = $matches[2];
 				
-				// Skip external and already minified
+				// Skip external, already minified, and user-excluded files
 				if ( !aero_is_local_url( $css_url ) || strpos( $css_url, '.min.css' ) !== false || strpos( $css_url, '/cache/aero/' ) !== false ) {
+					return $full_match;
+				}
+				if ( aero_asset_is_excluded( $css_url, 'aero_exclude_minify_css' ) ) {
 					return $full_match;
 				}
 				
@@ -2077,19 +2090,21 @@ function aero_process_html_assets( $html ) {
 				
 				$is_jquery = ( stripos( $js_url, 'jquery' ) !== false && stripos( $js_url, 'migrate' ) === false );
 				
-				// Minify if enabled and local
+				// Minify if enabled, local, and not user-excluded
 				if ( get_option( 'aero_combine_js', 1 ) === 'on' && 
 				     aero_is_local_url( $js_url ) && 
 				     strpos( $js_url, '.min.js' ) === false && 
-				     strpos( $js_url, '/cache/aero/' ) === false ) {
+				     strpos( $js_url, '/cache/aero/' ) === false &&
+				     ! aero_asset_is_excluded( $js_url, 'aero_exclude_minify_js' ) ) {
 					$minified_url = aero_minify_file( $js_url, 'js' );
 					if ( $minified_url ) {
 						$full_match = str_replace( $js_url, $minified_url, $full_match );
 					}
 				}
 				
-				// Add defer if enabled (except jQuery)
-				if ( get_option( 'aero_defer_js', 1 ) === 'on' && !$is_jquery ) {
+				// Add defer if enabled (jQuery and user-excluded scripts skipped)
+				if ( get_option( 'aero_defer_js', 1 ) === 'on' && !$is_jquery &&
+				     ! aero_asset_is_excluded( $js_url, 'aero_exclude_defer' ) ) {
 					$full_match = str_replace( '<script', '<script defer', $full_match );
 				}
 				
@@ -2100,6 +2115,36 @@ function aero_process_html_assets( $html ) {
 	}
 	
 	return $html;
+}
+
+/**
+ * Exclusion lists: match an asset URL against a user-defined list
+ * (one entry per line or comma-separated; case-insensitive substring).
+ */
+function aero_asset_is_excluded( $url, $option_key ) {
+	static $cache = array();
+	if ( ! isset( $cache[ $option_key ] ) ) {
+		$raw    = (string) get_option( $option_key, '' );
+		$tokens = preg_split( '/[\r\n,]+/', $raw );
+		$list   = array();
+		foreach ( (array) $tokens as $t ) {
+			$t = trim( $t );
+			if ( '' !== $t ) {
+				$list[] = strtolower( $t );
+			}
+		}
+		$cache[ $option_key ] = $list;
+	}
+	if ( empty( $cache[ $option_key ] ) ) {
+		return false;
+	}
+	$haystack = strtolower( $url );
+	foreach ( $cache[ $option_key ] as $needle ) {
+		if ( false !== strpos( $haystack, $needle ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 function aero_is_local_url( $url ) {
@@ -2116,31 +2161,58 @@ function aero_is_local_url( $url ) {
 }
 
 function aero_html_minify_start() {
-	if (!is_admin() && !defined('DOING_AJAX')) {
-		ob_start('aero_minify_html');
+	if ( is_admin() || defined( 'DOING_AJAX' ) ) {
+		return;
 	}
+
+	// Logged-in traffic is never stored by Batcache or the Edge Cache, so
+	// running the full optimization pipeline for it is pure per-request
+	// cost with zero cache benefit. Skip it (filterable for edge cases
+	// where an operator wants logged-in output processed anyway).
+	if ( is_user_logged_in() && ! apply_filters( 'aero_process_logged_in', false ) ) {
+		return;
+	}
+
+	// Only GET responses are cacheable; POST/HEAD/etc. should pass through.
+	if ( isset( $_SERVER['REQUEST_METHOD'] ) && 'GET' !== $_SERVER['REQUEST_METHOD'] ) {
+		return;
+	}
+
+	// Customizer preview markup must never be rewritten.
+	if ( is_customize_preview() ) {
+		return;
+	}
+
+	$GLOBALS['aero_ob_started'] = true;
+	ob_start( 'aero_minify_html' );
 }
 add_action( 'template_redirect', 'aero_html_minify_start', 1 );
 
 function aero_html_minify_end() {
-	if (!is_admin() && ob_get_length()) {
+	// Only close the buffer this plugin opened — blindly flushing here
+	// could terminate another plugin's output buffer.
+	if ( empty( $GLOBALS['aero_ob_started'] ) ) {
+		return;
+	}
+	if ( ob_get_length() ) {
 		ob_end_flush();
 	}
 }
 add_action( 'shutdown', 'aero_html_minify_end', 9999 );
 
-add_action( 'admin_bar_menu', 'aero_admin_bar_menu', 100 );
-function aero_admin_bar_menu( $wp_admin_bar ) {
-	if ( !current_user_can( 'manage_options' ) ) {
-		return;
+function aero_print_minify_comment() {
+	global $aero_minify_comment;
+	if (!empty($aero_minify_comment)) {
+		echo $aero_minify_comment;
 	}
-	
-	$wp_admin_bar->add_node( array(
-		'id'    => 'aero-clear-cache',
-		'title' => 'Clear Aero Cache',
-		'href'  => wp_nonce_url( admin_url( 'admin-post.php?action=aero_clear_cache_toolbar' ), 'aero_clear_cache_toolbar' ),
-	) );
 }
+add_action( 'shutdown', 'aero_print_minify_comment', 10000 );
+
+// NOTE: Aero's original single "Clear Aero Cache" admin-bar link has been
+// replaced by the "Aero Cache Control" dropdown registered in
+// includes/cache-manager/admin-bar.php (Clear Aero Cache, Flush Object Cache,
+// Purge Edge Cache, sequential Flush All, Cache Settings).
+// The admin-post handler below is kept for backwards compatibility.
 
 add_action( 'admin_post_aero_clear_cache_toolbar', 'aero_handle_toolbar_cache_clear' );
 function aero_handle_toolbar_cache_clear() {
@@ -2161,7 +2233,11 @@ function aero_handle_toolbar_cache_clear() {
 add_action( 'admin_notices', 'aero_cache_cleared_notice' );
 function aero_cache_cleared_notice() {
 	if ( isset( $_GET['aero_cache_cleared'] ) && $_GET['aero_cache_cleared'] == '1' ) {
-		echo '<div class="notice notice-success is-dismissible"><p><strong>Aero cache cleared!</strong></p></div>';
+		if ( function_exists( 'aero_ui_is_aero_screen' ) && aero_ui_is_aero_screen() ) {
+			echo '<div class="aero-notice aero-notice-success" style="margin:14px 20px 0 0;"><strong>Aero cache cleared!</strong></div>';
+		} else {
+			echo '<div class="notice notice-success is-dismissible"><p><strong>Aero cache cleared!</strong></p></div>';
+		}
 	}
 }
 

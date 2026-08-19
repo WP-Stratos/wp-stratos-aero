@@ -8,6 +8,9 @@ function aero_clear_minified_cache() {
 	// Delete all files in JS and CSS cache folders
 	$deleted = aero_delete_files_in_directory_count( AERO_CSS_CACHE_DIR );
 	$deleted += aero_delete_files_in_directory_count( AERO_JS_CACHE_DIR );
+
+	// Let dependents (e.g. the local font cache) clear alongside.
+	do_action( 'aero_minified_cache_cleared' );
 	
 	if ( $deleted > 0 ) {
 		update_option( 'aero_minified_files', [] ); // Clear saved minified files list
