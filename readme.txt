@@ -155,7 +155,7 @@ It's a managed plugin on WP Stratos hosting, so it reactivates on the next updat
 * Restore deletes every generated file and all optimization data in one click. Originals are never modified by conversion, so restoring returns the site to its exact prior state. Uninstalling the plugin performs the same cleanup automatically, including the rewrite rules.
 * License updated to GPL-3.0-or-later to accommodate the bundled CompressX-derived engine.
 
-= 1.0.0, Date =
+= 1.0.0 =
 * Initial release by WP Stratos
 * Dark mode admin interface with full body background (#000)
 * Responsive CSS Grid layout with main content + sidebar
